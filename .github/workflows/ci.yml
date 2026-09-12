@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  isolamento:
+    name: Isolamento entre tenants
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: colheitai
+          POSTGRES_USER: colheitai_owner
+          POSTGRES_PASSWORD: ci
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U colheitai_owner -d colheitai"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      POSTGRES_DB: colheitai
+      POSTGRES_USER: colheitai_owner
+      POSTGRES_PASSWORD: ci
+      POSTGRES_PORT: 5433
+      APP_DB_USER: colheitai_app
+      APP_DB_PASSWORD: ci
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      # O init do contêiner não roda aqui (service container não lê initdb.d),
+      # então o papel de aplicação é criado à mão, igual ao 00-papel-aplicacao.sh.
+      - name: Criar papel de aplicação
+        run: |
+          export PGPASSWORD=$POSTGRES_PASSWORD
+          psql -h localhost -p 5433 -U $POSTGRES_USER -d $POSTGRES_DB -v ON_ERROR_STOP=1 <<SQL
+            create role $APP_DB_USER login password '$APP_DB_PASSWORD';
+            grant connect on database $POSTGRES_DB to $APP_DB_USER;
+            grant usage on schema public to $APP_DB_USER;
+            alter default privileges for role $POSTGRES_USER in schema public
+              grant select, insert, update, delete on tables to $APP_DB_USER;
+            alter default privileges for role $POSTGRES_USER in schema public
+              grant usage, select on sequences to $APP_DB_USER;
+          SQL
+
+      - run: npm install --omit=dev
+        working-directory: api
+
+      # Toda migração nova passa por aqui. É a exigência da seção 13:
+      # isolamento verificado no CI, não conferido à mão.
+      - run: npm run teste
+        working-directory: api

@@ -1,0 +1,58 @@
+services:
+
+  # --- Banco (PostgreSQL) ---
+  db:
+    image: postgres:16-alpine
+    container_name: colheitai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - colheitai-dados:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [colheitai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # --- API (Node) ---
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: colheitai-api
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      API_PORT: 3000
+    ports:
+      - "${API_PORT}:3000"
+    volumes:
+      - ./api/src:/app/api/src:ro
+      - ./api/package.json:/app/api/package.json:ro
+      - ./db:/app/db:ro
+      - ./test:/app/test:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [colheitai-net]
+
+networks:
+  colheitai-net:
+
+volumes:
+  colheitai-dados:

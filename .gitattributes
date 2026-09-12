@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# Precisam de LF mesmo em Windows: rodam dentro do contêiner Linux.
+*.sh   text eol=lf
+*.sql  text eol=lf
