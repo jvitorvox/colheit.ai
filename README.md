@@ -60,12 +60,53 @@ api/src/          db.js (dois pools), migrar.js, server.js
 test/             isolamento entre tenants
 ```
 
+## Identidade do produtor
+
+Chave sintética, documentos como tabela, **identidade global e relação por tenant**.
+
+CPF não é chave primária porque o mesmo produtor opera sob CPF, CNPJ e inscrição
+estadual — com CPF como chave ele viraria N registros e a porta única quebraria no
+caso que ela existe para resolver. Somam-se: o consultor cadastra em campo sem o
+documento em mãos, e CPF como chave se espalharia por toda FK, log e URL.
+
+| Tabela | Escopo | O que guarda |
+|---|---|---|
+| `produtor` | global | identidade — é o mesmo João para todas as revendas |
+| `produtor_documento` | global | CPF, CNPJ, IE. PK em (tipo, valor): um documento, um dono |
+| `produtor_vinculo` | **por tenant** | a relação comercial. Tudo comercial pendura aqui |
+
+`produtor` é a exceção à regra do tenant_id, e a política é o preço: enxerga quem
+tem vínculo, não quem tem a coluna.
+
+```sql
+-- porta única: mesmo CPF por outra revenda devolve o MESMO produtor
+select app.vincular_produtor("João", '[{"tipo":"cpf","valor":"12345678901"}]');
+```
+
+A revenda que chega depois só ganha um vínculo — nunca descobre que o registro já
+existia. Cadastro sem documento é aceito (é o caso do campo), o que produz duplicata
+temporária: `app.fundir_produtor()` resolve, e **ninguém é apagado** — o perdedor
+aponta para o vencedor e o histórico continua alcançável.
+
+## Duas dimensões de isolamento
+
+| | Pergunta | Onde |
+|---|---|---|
+| tenant | de qual empresa é o dado | `app.tenant_id` |
+| carteira | qual consultor pode atuar sobre aquele produtor | `app.usuario_id` |
+
+Gestor enxerga a empresa inteira; consultor, só a carteira. Sem usuário no contexto
+é job e integração — rodam no tenant, sem pessoa por trás. Quem cadastra em campo
+entra na própria carteira no mesmo ato, senão perderia de vista o que acabou de criar.
+
+## Terra
+
+`propriedade` não tem coluna de dono. Tem `produtor_propriedade` com papel
+(proprietário, arrendatário, comodatário) e período — porque arrendamento é a regra,
+e o dono da terra também é cliente. O CAR é chave natural do **imóvel**, nunca do
+produtor, e é opcional: é autodeclarado e uma fazenda pode abranger mais de um.
+
 ## O que ainda não está aqui
 
-As tabelas de domínio — produtor, propriedade, talhão, pedido. Falta decidir a
-**chave de identidade do produtor** (CPF/CNPJ, CAR, ou composta), e ela decide se a
-porta única funciona: o produtor que compra da Revenda A tem que ser reconhecido
-como o mesmo que compra da Revenda B.
-
-`002_exemplo_isolamento.sql` cria uma tabela descartável só para o teste ter o que
-provar. Sai quando a primeira tabela de domínio entrar.
+Pedido e as dez etapas, funil, visita, catálogo. `002_exemplo_isolamento.sql` fica:
+testa `app.aplicar_isolamento` de forma independente do domínio.
