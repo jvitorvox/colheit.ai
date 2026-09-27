@@ -222,9 +222,59 @@ reescreveria o passado e vazaria histórico de um franqueado para outro.
 produto dele — visibilidade descendente, **e só de leitura**: quem opera a venda é
 quem a altera.
 
+## Módulo push
+
+É o push do PWA que cumpre o "chega sem abrir o app" — custo zero por mensagem,
+sem intermediário e sem template. O WhatsApp continua sem disparar nada: ele só
+recebe o que vem do campo e responde quando perguntam.
+
+```
+GET    /push/chave-publica    a chave VAPID, sem sessão (o navegador precisa antes)
+POST   /push/assinaturas      registra o navegador
+DELETE /push/assinaturas      remove pelo endpoint
+GET    /push/assinaturas      as minhas
+```
+
+O envio não é rota. `npm run despachar` drena a fila com o papel **dono**, porque
+ela atravessa tenants — é da plataforma, não de uma empresa. Mesmo motivo pelo qual
+migração e job usam o dono.
+
+### O que o despachante decide
+
+| Desfecho | O que faz |
+|---|---|
+| entregou em ao menos um navegador | marca enviada — quem tem celular e desktop não precisa dos dois de pé |
+| `404` ou `410` | apaga a assinatura: é o serviço dizendo que aquele navegador não existe mais |
+| falha passageira | adia; na terceira tentativa descarta com motivo |
+| produtor sem assinatura | descarta na hora — "a carga saiu" não vale três dias depois, e a informação continua no histórico do pedido |
+
+`assinatura_push.agente` guarda o user agent de propósito: é assim que a ressalva do
+iPhone — onde o push exige adicionar o portal à tela de início — vira número em vez
+de suposição.
+
+### O contrato do cliente
+
+O PWA ainda não existe. Quando existir, o service worker precisa de:
+
+```js
+const { chavePublica } = await (await fetch('/push/chave-publica')).json();
+const sub = await registro.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: chavePublica,
+});
+await fetch('/push/assinaturas', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+  body: JSON.stringify({ ...sub.toJSON(), agente: navigator.userAgent }),
+});
+```
+
+A carga que chega no `push` é `{ titulo, texto, pedidoId, etapa }`.
+
 ## O que ainda não está aqui
 
 
 
-Funil, visita, catálogo e o caderno de campo. A entrega das notificações — a fila existe, quem envia ainda não. E a captura pelo WhatsApp, que é quem entrega o código de acesso do produtor. `002_exemplo_isolamento.sql` fica:
+
+Funil, visita, catálogo e o caderno de campo. O PWA — a API do push está pronta, a tela não. E a captura pelo WhatsApp, que é quem entrega o código de acesso do produtor. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

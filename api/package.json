@@ -6,11 +6,13 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "migrar": "node src/migrar.js",
-    "teste": "node --test --test-concurrency=1 ../test/*.test.js"
+    "teste": "node --test --test-concurrency=1 ../test/*.test.js",
+    "despachar": "node src/modulos/push/despachante.js"
   },
   "dependencies": {
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "web-push": "^3.6.7"
   }
 }

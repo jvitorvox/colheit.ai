@@ -31,6 +31,12 @@ jobs:
       # Segredo descartável, só do CI. O de produção é secret do repositório.
       JWT_SEGREDO: ci-apenas-32-caracteres-no-minimo-ok
       AUTH_EXPOR_CODIGO: '1'
+      # Par VAPID descartável, só do CI. O despacho é testado com envio
+      # injetado, então nada sai daqui — mas a chave pública é servida por rota
+      # e precisa existir.
+      VAPID_PUBLICA: BKZAe2dkuZi-cFvCuPoP2J5IqgB2lrbpnBUr9pRmQcHuJ9_38dSMBvw1yIS_1QjXA5KJf9xacQaDTPjyE5d9-hQ
+      VAPID_PRIVADA: AenJ4IENMRG1eO4tOVg_lcCiWQMH3UYx9CBmGeUFCU0
+      VAPID_CONTATO: mailto:ci@colheit.ai
 
     steps:
       - uses: actions/checkout@v4

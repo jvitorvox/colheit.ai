@@ -5,6 +5,7 @@ import { tratarErro } from './http/erros.js';
 import { rotasAuth } from './modulos/auth/rotas.js';
 import { rotasCadastro } from './modulos/cadastro/rotas.js';
 import { rotasPedidos } from './modulos/pedidos/rotas.js';
+import { rotasPush } from './modulos/push/rotas.js';
 
 export function criarApp() {
   const api = express();
@@ -28,6 +29,7 @@ export function criarApp() {
   // Pedidos atende as duas sessões: a rota decide por verbo, e a política
   // decide o que cada uma enxerga.
   api.use('/pedidos', rotasPedidos);
+  api.use('/push', rotasPush);
 
   api.use((_req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
   api.use(tratarErro);

@@ -41,6 +41,9 @@ services:
       API_PORT: 3000
       JWT_SEGREDO: ${JWT_SEGREDO}
       AUTH_EXPOR_CODIGO: ${AUTH_EXPOR_CODIGO}
+      VAPID_PUBLICA: ${VAPID_PUBLICA}
+      VAPID_PRIVADA: ${VAPID_PRIVADA}
+      VAPID_CONTATO: ${VAPID_CONTATO}
     ports:
       - "${API_PORT}:3000"
     volumes:
