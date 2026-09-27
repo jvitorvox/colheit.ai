@@ -6,6 +6,7 @@ import { rotasAuth } from './modulos/auth/rotas.js';
 import { rotasCadastro } from './modulos/cadastro/rotas.js';
 import { rotasPedidos } from './modulos/pedidos/rotas.js';
 import { rotasPush } from './modulos/push/rotas.js';
+import { rotasCaptura } from './modulos/captura/rotas.js';
 
 export function criarApp() {
   const api = express();
@@ -30,6 +31,7 @@ export function criarApp() {
   // decide o que cada uma enxerga.
   api.use('/pedidos', rotasPedidos);
   api.use('/push', rotasPush);
+  api.use('/captura', rotasCaptura);
 
   api.use((_req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
   api.use(tratarErro);

@@ -271,10 +271,59 @@ await fetch('/push/assinaturas', {
 
 A carga que chega no `push` é `{ titulo, texto, pedidoId, etapa }`.
 
+## Módulo captura — WhatsApp
+
+O hábito já existe: produtor e RTV trocam foto de talhão e áudio sobre a lavoura
+hoje, e isso morre numa conversa pessoal. O módulo não cria comportamento novo —
+dá destino ao que já acontece. É a arquitetura do RDO do Construtivo, com o
+consultor no lugar do engenheiro.
+
+```
+POST /captura/mensagens          o gateway entrega o que chegou
+GET  /captura/saidas             o que ele deve enviar
+POST /captura/saidas/:id/enviada
+GET  /captura/relatos            a fila do consultor (e o produtor vê o que mandou)
+POST /captura/relatos/:id/validar
+POST /captura/relatos/:id/descartar   exige motivo
+POST /captura/canal              o número da empresa
+```
+
+### "Nunca dispara" virou restrição, não disciplina
+
+`mensagem_whatsapp` tem `check (direcao = 'entrada' or responde_a is not null)`.
+Saída só existe atrelada a uma entrada — **o banco recusa uma mensagem solta**.
+A regra deixou de depender de quem escreve o gateway, e há teste que tenta
+inserir promoção direto no banco e falha.
+
+Um número por tenant, como no Construtivo: se um cair, o canal para de um
+cliente, não da plataforma.
+
+### ⚠️ A extração está desligada, e é decisão
+
+Áudio de produtor descrevendo a própria lavoura é o dado mais sensível que o
+projeto captura, e o **plano sem-treino do provedor de IA segue pendente** desde
+o copiloto do CRM. Enquanto não estiver fechado, `extrator.js` devolve `null` e o
+relato fica em `aguardando_extracao` — o estado honesto: chegou, está guardado,
+ninguém leu.
+
+**A espera é reversível.** `extrairPendentes()` passa o extrator na fila represada,
+então nada do que chegou antes se perde: no dia em que o plano for fechado, a base
+de campo acumulada entra de uma vez. Existe teste para isso.
+
+### O gateway fica fora
+
+Baileys é adaptador, não módulo. Ele se identifica por `GATEWAY_SEGREDO` — não é
+usuário, não tem sessão, e atende vários canais. Sem o segredo configurado a porta
+fica fechada, de propósito.
+
+Manter o gateway fora é o que permite trocá-lo (pela API oficial, por exemplo) sem
+tocar no módulo — e é o que torna tudo isto testável sem WhatsApp nenhum.
+
 ## O que ainda não está aqui
 
 
 
 
-Funil, visita, catálogo e o caderno de campo. O PWA — a API do push está pronta, a tela não. E a captura pelo WhatsApp, que é quem entrega o código de acesso do produtor. `002_exemplo_isolamento.sql` fica:
+
+Funil, visita e catálogo. O PWA — a API do push está pronta, a tela não. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

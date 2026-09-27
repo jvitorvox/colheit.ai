@@ -12,12 +12,13 @@ export async function subirApi() {
   await new Promise((ok) => servidor.once('listening', ok));
   const base = `http://127.0.0.1:${servidor.address().port}`;
 
-  const req = (caminho, { metodo = 'GET', corpo, token } = {}) =>
+  const req = (caminho, { metodo = 'GET', corpo, token, cabecalhos } = {}) =>
     fetch(base + caminho, {
       method: metodo,
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(cabecalhos ?? {}),
       },
       body: corpo ? JSON.stringify(corpo) : undefined,
     }).then(async (r) => ({ status: r.status, corpo: await r.json().catch(() => null) }));
