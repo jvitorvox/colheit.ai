@@ -52,6 +52,7 @@ services:
       - ./api/package.json:/app/api/package.json:ro
       - ./db:/app/db:ro
       - ./test:/app/test:ro
+      - ./web:/app/web:ro
     depends_on:
       db:
         condition: service_healthy

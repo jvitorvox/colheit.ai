@@ -2,9 +2,20 @@
 // resposta em JSON — nenhuma regra mora aqui.
 import { Router } from 'express';
 import { rota } from '../../http/erros.js';
+import { soEmpresa, soProdutor } from '../../http/identificar.js';
 import * as servico from './service.js';
 
 export const rotasCadastro = Router();
+
+/* ----------------------------------------------------------------- portal */
+
+// A lavoura é do produtor, e o portal precisa lê-la. Vem antes do `soEmpresa`
+// abaixo, que fecha todo o resto do módulo para a área da empresa.
+rotasCadastro.get('/minha-lavoura', soProdutor, rota(async (req, res) => {
+  res.json(await servico.minhaLavoura(req.ctx));
+}));
+
+rotasCadastro.use(soEmpresa);
 
 /* ---------------------------------------------------------------- produtor */
 

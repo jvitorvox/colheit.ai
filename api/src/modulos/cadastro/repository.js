@@ -129,3 +129,25 @@ export async function vinculoDoProdutor(cx, produtorId) {
   );
   return rows[0]?.id ?? null;
 }
+
+/**
+ * A lavoura como o produtor a vê: a terra dele com os talhões dentro.
+ *
+ * Uma consulta só, em vez de listar propriedades e depois talhões de cada uma —
+ * o portal abre nisto, e é a tela que precisa ser rápida no celular do campo.
+ */
+export async function minhaLavoura(cx) {
+  const { rows } = await cx.query(`
+    select pr.id, pr.nome, pr.municipio, pr.uf, pr.area_ha,
+           coalesce(
+             (select json_agg(json_build_object('id', t.id, 'nome', t.nome, 'areaHa', t.area_ha)
+                              order by t.nome)
+                from talhao t where t.propriedade_id = pr.id),
+             '[]'::json) as talhoes,
+           (select pp.papel from produtor_propriedade pp
+             where pp.propriedade_id = pr.id and pp.produtor_id = app.produtor_atual()
+               and pp.fim is null limit 1) as meu_papel
+      from propriedade pr
+     order by pr.nome`);
+  return rows;
+}

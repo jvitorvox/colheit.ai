@@ -319,11 +319,55 @@ fica fechada, de propósito.
 Manter o gateway fora é o que permite trocá-lo (pela API oficial, por exemplo) sem
 tocar no módulo — e é o que torna tudo isto testável sem WhatsApp nenhum.
 
+## O portal do produtor (PWA)
+
+Servido pela própria API, em `web/`. Mesma origem resolve CORS, escopo de service
+worker e sessão de uma vez só — em produção o nginx fica na frente, mas a origem
+continua sendo uma.
+
+**Sem build.** O repositório não tem empacotador e um arquivo que o navegador lê
+direto é menos coisa para manter. Se um dia precisar de framework, ele entra por
+escolha e não por inércia.
+
+```
+web/index.html   casca e estilo
+web/app.js       telas, rotas por hash, cliente da API
+web/sw.js        cache da casca e recebimento do push
+web/manifest.json
+```
+
+### Três telas
+
+**Entrar** — telefone e código, sem senha. **Meus pedidos** — progresso compacto por
+cartão; dez etiquetas em 314px de celular ficam ilegíveis e obrigam a arrastar de
+lado para ver o que ele quer saber. **Detalhe** — aí sim a faixa completa das dez
+etapas, mais nota, boleto e histórico. **Minha lavoura** — a terra e os talhões.
+
+Na etapa 6 aparece o **Dia Zero**: entre saber que a carga saiu e ela chegar, é a
+janela para acertar máquina, equipe e regulagem.
+
+### Offline é leitura, e só
+
+O service worker guarda a casca e a última resposta de cada consulta. Sem conexão o
+app abre e mostra o que tinha, com uma faixa dizendo que é cópia — melhor que tela
+em branco no meio do talhão. **Fila de escrita não entra aqui**: o portal é de
+leitura, e sincronização offline é problema do aplicativo do consultor, que é quem
+trabalha onde não há sinal.
+
+Resposta de `/auth/` nunca é guardada.
+
+### Cache em desenvolvimento
+
+`express.static` serve com `max-age=0` fora de produção. Com cache, cada mudança de
+tela pediria recarga forçada — e alguém perderia meia hora achando que o código não
+subiu.
+
 ## O que ainda não está aqui
 
 
 
 
 
-Funil, visita e catálogo. O PWA — a API do push está pronta, a tela não. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+Funil, visita e catálogo. A área da empresa — o portal do produtor existe, o console da revenda não. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

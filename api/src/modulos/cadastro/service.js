@@ -179,3 +179,8 @@ export function autorizarConsultor(ctx, corpo) {
 }
 
 export { soDigitos };
+
+/** A lavoura do produtor logado — é o que o portal abre na primeira tela. */
+export function minhaLavoura(ctx) {
+  return comContexto(ctx, (cx) => repo.minhaLavoura(cx));
+}
