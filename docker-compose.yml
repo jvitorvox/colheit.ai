@@ -53,13 +53,43 @@ services:
       - ./db:/app/db:ro
       - ./test:/app/test:ro
       - ./web:/app/web:ro
+      - ./gateway/src:/app/gateway/src:ro
     depends_on:
       db:
         condition: service_healthy
     networks: [colheitai-net]
+
+  # --- Gateway do WhatsApp (Baileys) ---
+  #
+  # Processo separado de propósito: bloqueio ou travamento aqui não derruba a
+  # API. Sobe sob demanda — `docker compose --profile whatsapp up` — porque
+  # exige parear um número lendo o QR no log, e ninguém quer isso a cada
+  # `compose up` de desenvolvimento.
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: colheitai-gateway
+    profiles: [whatsapp]
+    restart: unless-stopped
+    environment:
+      API_BASE: http://api:3000
+      GATEWAY_SEGREDO: ${GATEWAY_SEGREDO}
+      SESSOES_DIR: /dados/sessoes
+      MIDIA_DIR: /dados/midia
+    volumes:
+      - colheitai-whatsapp:/dados
+      - ./gateway/src:/app/gateway/src:ro
+    depends_on: [api]
+    networks: [colheitai-net]
+    stdin_open: true
+    tty: true
 
 networks:
   colheitai-net:
 
 volumes:
   colheitai-dados:
+  # Sessão pareada do WhatsApp e mídia recebida. Perder este volume significa
+  # parear os números de novo.
+  colheitai-whatsapp:

@@ -24,6 +24,15 @@ rotasCaptura.post('/mensagens', soGateway, rota(async (req, res) => {
   res.status(201).json(await servico.receber(req.body ?? {}));
 }));
 
+rotasCaptura.get('/canais', soGateway, rota(async (_req, res) => {
+  res.json(await servico.canaisAtivos());
+}));
+
+rotasCaptura.post('/canais/:numero/conectado', soGateway, rota(async (req, res) => {
+  await servico.marcarConectado(req.params.numero);
+  res.json({ ok: true });
+}));
+
 rotasCaptura.get('/saidas', soGateway, rota(async (_req, res) => {
   res.json(await servico.saidasPendentes());
 }));

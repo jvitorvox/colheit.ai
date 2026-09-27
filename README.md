@@ -538,6 +538,45 @@ atravessa revenda. **Escrever exige sessão de empresa**: quem fecha o registro 
 o consultor. E o franqueado alcança o talhão pelos pedidos que carimbam o
 território dele, porque o que foi plantado é justamente o que ele está comprando.
 
+## O gateway do WhatsApp (Baileys)
+
+Processo separado, em `gateway/`. Sobe sob demanda:
+
+```bash
+docker compose --profile whatsapp up gateway
+```
+
+Na primeira vez ele imprime um QR por número no log — alguém precisa parear. A
+sessão fica no volume `colheitai-whatsapp`; perder o volume significa parear de
+novo.
+
+### Por que fica fora da API
+
+Um travamento ou bloqueio aqui **não derruba o resto**. E é o que permite trocar
+o Baileys pela API oficial depois sem tocar no módulo de captura.
+
+### A decisão fica em `laco.js`, a biblioteca em `whatsapp.js`
+
+`laco.js` não tem uma linha de Baileys — roda em teste com um WhatsApp de
+mentira, e é por isso que o comportamento inteiro é coberto sem número nenhum.
+`whatsapp.js` é a única parte que o CI **não** cobre, e a única que não decide
+nada.
+
+| O gateway | Por quê |
+|---|---|
+| descarta grupo, status e mensagem nossa | responder num grupo seria disparo aos olhos de quem só estava lendo |
+| ignora id repetido | reconexão reentrega, e relato duplicado é pior que nenhum |
+| pausa entre envios | rajada é o que chama atenção, e atenção vira bloqueio |
+| não marca como enviada se falhar | continua na fila e sai na próxima volta |
+| não reconecta em bloqueio definitivo | o número foi embora; insistir só queima o próximo |
+
+Ele **nunca decide o que enviar**: a API só cria saída atrelada a uma entrada, e
+o banco recusa o contrário. Aqui não há o que julgar.
+
+⚠️ Baileys é biblioteca não oficial. É contra os termos do WhatsApp, e quando o
+bloqueio vier não haverá a quem recorrer. Um número por tenant existe para o
+estrago parar num cliente, e o portal continua de pé sozinho.
+
 ## O que ainda não está aqui
 
 
@@ -550,5 +589,6 @@ território dele, porque o que foi plantado é justamente o que ele está compra
 
 
 
-O adaptador do Baileys — a tubulação da captura está pronta e testada, falta o processo que conversa com o WhatsApp. E o extrator de IA, que espera o plano sem-treino. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+O extrator de IA, que espera o plano sem-treino do provedor. E armazenamento de verdade para a mídia: hoje o áudio e a foto ficam num volume de disco. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

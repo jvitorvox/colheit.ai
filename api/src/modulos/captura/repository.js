@@ -139,3 +139,13 @@ export const aplicarExtracao = (dono, id, transcricao, extraido, tipo) =>
                      situacao = 'pendente'
                where id = $1`,
   [id, transcricao, extraido ? JSON.stringify(extraido) : null, tipo ?? null]);
+
+/** Todos os canais ativos — o gateway atende vários tenants, então usa o dono. */
+export async function canaisAtivos(dono) {
+  const { rows } = await dono.query(
+    'select tenant_id, numero from canal_whatsapp where ativo order by criado_em');
+  return rows;
+}
+
+export const marcarConectado = (dono, numero) =>
+  dono.query('update canal_whatsapp set conectado_em = now() where numero = $1', [numero]);

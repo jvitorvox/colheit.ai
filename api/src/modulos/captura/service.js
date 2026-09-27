@@ -183,3 +183,8 @@ export async function extrairPendentes({ limite = 100 } = {}) {
   }
   return { extrator: 'ligado', processados: n };
 }
+
+/* ------------------------------------------------------- canais (gateway) */
+
+export const canaisAtivos = () => repo.canaisAtivos(dono);
+export const marcarConectado = (numero) => repo.marcarConectado(dono, soDigitos(numero));
