@@ -455,6 +455,50 @@ mostra **dois preços médios** — o cobrado e o efetivo —, e a diferença en
 O saco não é cobrado, mas **o royalty do detentor da tecnologia continua devido**.
 É o que torna a geração de demanda cara de verdade.
 
+## Funil de prospecção — e o laço
+
+Uma oportunidade por produtor por safra: é assim que a operação pensa. Duas para
+o mesmo produtor na mesma safra seriam a mesma conversa contada duas vezes.
+
+```
+GET   /funil                  lista, por safra e estágio
+GET   /funil/resumo           os seis estágios, na ordem da conversa
+GET   /funil/penetracao       o laço: área → potencial → venda → lacuna
+POST  /funil                  abre em prospecção
+POST  /funil/:id/mover        perder exige motivo
+PATCH /funil/:id/potencial    informado manda sobre estimado
+```
+
+### O laço é o que diferencia isto de um CRM qualquer
+
+O bench mostrou que funil todo mundo tem. O que o desenho chama de fosso é **"o
+laço que devolve o dado do campo ao funil"** — e é isto:
+
+> **área cadastrada → potencial → comparada com o que foi vendido → a lacuna**
+
+O potencial sai da área que o campo já registrou, sem ninguém digitar. Quem
+souber o número informa, e aí o informado manda — a coluna ao lado diz qual dos
+dois foi.
+
+A taxa de sacos por hectare **se declara como padrão** quando ninguém informou,
+em vez de fingir precisão que a agronomia ainda não deu.
+
+A lista ordena pela **lacuna em sacos, não pelo percentual**: o produtor de
+18.000 ha com 25% de penetração vale mais atenção que o de 400 ha com 5%.
+
+### O que a penetração não diz
+
+A lacuna mostra **onde** o concorrente está, não **qual marca** o ocupa. Isso só o
+talhão conta, e quem traz o talhão é o caderno de campo. Dizer a marca sem ele
+seria inventar.
+
+### A camada comercial não atravessa
+
+`oportunidade` **não tem política de produtor** — nenhuma. Motivo de perda,
+concorrente e potencial ficam do lado de dentro, e a ausência de política é a
+forma mais difícil de desfazer por engano. Se vazar, o consultor deixa de
+registrar a verdade e a base perde o valor.
+
 ## O que ainda não está aqui
 
 
@@ -465,5 +509,6 @@ O saco não é cobrado, mas **o royalty do detentor da tecnologia continua devid
 
 
 
-Funil de prospecção. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+O caderno de campo — plantio por talhão, que é o que permitiria nomear a marca concorrente. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

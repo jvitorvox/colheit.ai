@@ -79,6 +79,7 @@ const ABAS = [
   ['painel', 'Painel'],
   ['pedidos', 'Pedidos'],
   ['carteira', 'Carteira'],
+  ['funil', 'Funil'],
   ['catalogo', 'Catálogo'],
   ['visitas', 'Visitas'],
   ['campo', 'Do campo'],
@@ -538,6 +539,7 @@ async function desenhar() {
   try {
     if (estado.aba === 'pedidos') await telaPedidos(main);
     else if (estado.aba === 'carteira') await telaCarteira(main);
+    else if (estado.aba === 'funil') await telaFunil(main);
     else if (estado.aba === 'catalogo') await telaCatalogo(main);
     else if (estado.aba === 'visitas') await telaVisitas(main);
     else if (estado.aba === 'campo') await telaCampo(main);
@@ -731,3 +733,130 @@ const janelaPreco = (p) => janela(`Preço — ${p.nome}`, [
     vigenteDe: v.vigenteDe || null,
   },
 }), 'Definir');
+
+/* ------------------------------------------------------------------ funil */
+
+const ROTULO_ESTAGIO = {
+  prospeccao: 'Prospecção', qualificacao: 'Qualificação', proposta: 'Proposta',
+  negociacao: 'Negociação', ganha: 'Ganha', perdida: 'Perdida',
+};
+
+async function telaFunil(main) {
+  const safra = encodeURIComponent(SAFRA_ATUAL);
+  const [resumo, lista, pen] = await Promise.all([
+    api(`/funil/resumo?safra=${safra}`),
+    api(`/funil?safra=${safra}`),
+    api(`/funil/penetracao?safra=${safra}`),
+  ]);
+
+  const nova = el('button', 'botao', 'Nova oportunidade');
+  nova.onclick = () => janelaOportunidade();
+  main.append(cabecalho('Funil', `safra ${SAFRA_ATUAL}`, [nova]));
+
+  main.append(cartaoFunil(resumo));
+  main.append(cartaoPenetracao(pen));
+
+  if (lista.length === 0) {
+    main.append(el('p', 'vazio', 'Nenhuma oportunidade aberta nesta safra.'));
+    return;
+  }
+
+  main.append(tabela(
+    ['Produtor', 'Estágio', 'Potencial', 'Responsável', 'Motivo / concorrente', ''],
+    lista.map((o) => {
+      const mover = el('button', 'botao vazado pequeno', 'Mover');
+      mover.onclick = (ev) => { ev.stopPropagation(); janelaMover(o); };
+      const fechado = o.estagio === 'ganha' || o.estagio === 'perdida';
+      return [
+        o.produtor,
+        el('span', o.estagio === 'ganha' ? 'selo feito'
+          : o.estagio === 'perdida' ? 'selo ruim' : 'selo', ROTULO_ESTAGIO[o.estagio]),
+        o.potencial_sc ? `${num(o.potencial_sc)} sc` : '—',
+        o.responsavel ?? '—',
+        o.motivo_perda ? `${o.motivo_perda}${o.concorrente ? ` · ${o.concorrente}` : ''}` : '—',
+        fechado ? '' : mover,
+      ];
+    }),
+  ));
+}
+
+function cartaoFunil(resumo) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'Onde estão as conversas'));
+  const maior = Math.max(1, ...resumo.map((e) => e.quantas));
+  const funil = el('div', 'funil');
+  resumo.forEach((e) => {
+    const l = el('div', 'faixa-etapa');
+    const medidor = el('div', 'medidor');
+    const i = el('i');
+    i.style.width = `${(e.quantas / maior) * 100}%`;
+    if (e.estagio === 'perdida') i.style.background = 'var(--alerta)';
+    if (e.estagio === 'ganha') i.style.background = 'var(--marca)';
+    medidor.append(i);
+    l.append(el('span', null, ROTULO_ESTAGIO[e.estagio]), medidor,
+      el('span', 'num', e.potencialSc ? `${num(e.potencialSc)} sc` : String(e.quantas)));
+    funil.append(l);
+  });
+  c.append(funil);
+  return c;
+}
+
+/**
+ * A penetração é o laço: a área que o campo cadastrou vira potencial, e o
+ * potencial encontra o que foi vendido. A lacuna é onde está o concorrente —
+ * mas a tela não diz a marca, porque só o talhão conta isso.
+ */
+function cartaoPenetracao(pen) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', `Penetração · ${pen.scPorHa} sc/ha (${pen.origemDaTaxa})`));
+  c.append(tabela(
+    ['Produtor', 'Área', 'Potencial', 'Comprado', 'Lacuna', 'Penetração'],
+    pen.linhas.slice(0, 12).map((l) => {
+      const barra = el('div', 'trilho');
+      const i = el('i');
+      i.style.width = `${Math.min(l.penetracao ?? 0, 100)}%`;
+      barra.append(i);
+      const caixa = el('div');
+      caixa.style.minWidth = '110px';
+      caixa.append(barra, el('span', 'passo', l.penetracao === null ? '—' : `${l.penetracao}%`));
+      return [
+        l.produtor, `${num(l.areaHa)} ha`, `${num(l.potencialSc)} sc`,
+        `${num(l.compradoSc)} sc`, `${num(l.lacunaSc)} sc`, caixa,
+      ];
+    }),
+  ));
+  c.append(el('p', 'sub',
+    'A lacuna é onde o concorrente está. Qual marca ocupa, só o talhão conta.'));
+  return c;
+}
+
+async function janelaOportunidade() {
+  const produtores = await api('/cadastro/produtores');
+  if (produtores.length === 0) { alerta('Cadastre um produtor antes.'); return; }
+  janela('Nova oportunidade', [
+    { nome: 'produtor', rotulo: `Produtor (${produtores.map((p) => p.nome).join(', ')})`,
+      valor: produtores[0].nome },
+    { nome: 'safra', rotulo: 'Safra', valor: SAFRA_ATUAL },
+    { nome: 'potencialSc', rotulo: 'Potencial em sacos (em branco: estima pela área)',
+      tipo: 'number', obrigatorio: false },
+  ], async (v) => {
+    const alvo = produtores.find((p) => p.nome.toLowerCase() === v.produtor.trim().toLowerCase());
+    if (!alvo) throw new Error('produtor não encontrado na sua carteira');
+    await api('/funil', {
+      metodo: 'POST',
+      corpo: { produtorId: alvo.id, safra: v.safra,
+        potencialSc: v.potencialSc ? Number(v.potencialSc) : null },
+    });
+  }, 'Abrir');
+}
+
+const janelaMover = (o) => janela(`Mover — ${o.produtor}`, [
+  { nome: 'estagio', rotulo: 'Estágio (prospeccao, qualificacao, proposta, negociacao, ganha, perdida)',
+    valor: 'qualificacao' },
+  { nome: 'motivoPerda', rotulo: 'Motivo, se perdida', tipo: 'textarea', obrigatorio: false },
+  { nome: 'concorrente', rotulo: 'Concorrente, se souber', obrigatorio: false },
+], (v) => api(`/funil/${o.id}/mover`, {
+  metodo: 'POST',
+  corpo: { estagio: v.estagio, motivoPerda: v.motivoPerda || null,
+    concorrente: v.concorrente || null },
+}), 'Mover');
