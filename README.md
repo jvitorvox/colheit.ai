@@ -172,8 +172,59 @@ tenant: quando um eixo está preenchido, o outro é nulo e as políticas dele n�
 
 A sessão do portal é de **leitura** no núcleo de cadastro, e não entra em `/cadastro`.
 
+## Módulo pedidos — as dez etapas
+
+O coração do produto. A referência é acompanhar uma entrega de e-commerce: hoje o
+pedido some depois do "fechado" e o agricultor só descobre o andamento se perguntar.
+
+| | | avisa | | | | avisa |
+|---|---|---|---|---|---|---|
+| 1 | Negociação | | | 6 | Transporte | ✓ |
+| 2 | Pedido | ✓ | | 7 | Entrega | ✓ |
+| 3 | Crédito | ✓ | | 8 | Plantio | |
+| 4 | Faturamento | ✓ | | 9 | Acompanhamento | ✓ |
+| 5 | Expedição | | | 10 | Resultado | |
+
+```
+GET   /pedidos                      a empresa vê a carteira; o produtor vê os dele
+GET   /pedidos/etapas               as dez, com quem faz e quem avisa
+GET   /pedidos/:id                  com itens, nota e histórico completo
+POST  /pedidos                      nasce na etapa 1, com o território carimbado
+POST  /pedidos/:id/avancar          uma etapa, nunca pulando
+POST  /pedidos/:id/retroceder       exige motivo, fica marcado no histórico
+POST  /pedidos/:id/cancelar         exige motivo
+PATCH /pedidos/:id/credito          pendente · aprovado · recusado
+POST  /pedidos/:id/nota             a nota, que é o motor da captura
+POST  /pedidos/:id/nota/pago        registra o pagamento
+GET   /pedidos/avisos               fila de notificação; quem entrega é outro módulo
+```
+
+### Três regras que não são burocracia
+
+**A etapa 4 exige a nota.** Marcar faturado sem o documento deixaria o dado entrar
+pela metade — e a nota *é* o sell-out. A regra deixou de ser combinada e virou
+estrutural.
+
+**Avança uma de cada vez.** Pular seria cômodo e destrói a promessa: a régua do
+agricultor é ver o pedido andar, e pedido que salta de 2 para 7 não conta história.
+
+**Retroceder exige motivo e fica marcado.** A realidade volta — carga recusada na
+porteira, entrega que não foi. Apagar o passo em falso seria perder o que a operação
+precisa aprender.
+
+### O carimbo do território
+
+`pedido.franqueado_id` e `pedido.municipio` são gravados na criação, a partir do
+município da terra, e **nunca recalculados**. Redesenhar um território depois
+reescreveria o passado e vazaria histórico de um franqueado para outro.
+
+É por esse carimbo que o franqueado enxerga a venda que a distribuidora fez com
+produto dele — visibilidade descendente, **e só de leitura**: quem opera a venda é
+quem a altera.
+
 ## O que ainda não está aqui
 
 
-Pedido e as dez etapas, funil, visita, catálogo. E a captura pelo WhatsApp, que é quem entrega o código de acesso do produtor. `002_exemplo_isolamento.sql` fica:
+
+Funil, visita, catálogo e o caderno de campo. A entrega das notificações — a fila existe, quem envia ainda não. E a captura pelo WhatsApp, que é quem entrega o código de acesso do produtor. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

@@ -4,6 +4,7 @@ import { identificar, soEmpresa } from './http/identificar.js';
 import { tratarErro } from './http/erros.js';
 import { rotasAuth } from './modulos/auth/rotas.js';
 import { rotasCadastro } from './modulos/cadastro/rotas.js';
+import { rotasPedidos } from './modulos/pedidos/rotas.js';
 
 export function criarApp() {
   const api = express();
@@ -23,6 +24,10 @@ export function criarApp() {
 
   // Cadastro é área da empresa: a sessão do portal não entra aqui.
   api.use("/cadastro", identificar, soEmpresa, rotasCadastro);
+
+  // Pedidos atende as duas sessões: a rota decide por verbo, e a política
+  // decide o que cada uma enxerga.
+  api.use('/pedidos', rotasPedidos);
 
   api.use((_req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
   api.use(tratarErro);
