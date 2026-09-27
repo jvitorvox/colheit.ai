@@ -48,10 +48,10 @@ export async function identificar(dono, telefone, tenantId) {
 export async function gravarEntrada(dono, m) {
   const { rows } = await dono.query(`
     insert into mensagem_whatsapp (tenant_id, telefone, direcao, tipo, texto,
-                                   midia_ref, produtor_id, usuario_id)
+                                   midia_id, produtor_id, usuario_id)
     values ($1,$2,'entrada',$3,$4,$5,$6,$7)
     returning id, criado_em`,
-    [m.tenantId, m.telefone, m.tipo, m.texto, m.midiaRef, m.produtorId, m.usuarioId]);
+    [m.tenantId, m.telefone, m.tipo, m.texto, m.midiaId, m.produtorId, m.usuarioId]);
   return rows[0];
 }
 
@@ -100,7 +100,7 @@ export async function criarRelato(dono, r) {
 export async function relatos(cx, situacao) {
   const { rows } = await cx.query(`
     select r.id, r.tipo, r.situacao, r.transcricao, r.extraido, r.criado_em,
-           r.observacao, p.nome as produtor, m.tipo as origem, m.telefone
+           r.observacao, p.nome as produtor, m.tipo as origem, m.telefone, m.midia_id
       from relato r
       join produtor p on p.id = r.produtor_id
       join mensagem_whatsapp m on m.id = r.mensagem_id
@@ -126,7 +126,7 @@ export async function decidirRelato(cx, id, situacao, observacao, talhaoId) {
 
 export async function aguardandoExtracao(dono, limite) {
   const { rows } = await dono.query(`
-    select r.id, r.tenant_id, m.tipo, m.texto, m.midia_ref
+    select r.id, r.tenant_id, m.tipo, m.texto, m.midia_id
       from relato r join mensagem_whatsapp m on m.id = r.mensagem_id
      where r.situacao = 'aguardando_extracao'
      order by r.criado_em limit $1`, [limite]);

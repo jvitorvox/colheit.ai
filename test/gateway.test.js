@@ -24,7 +24,19 @@ function clienteApi() {
     if (!r.ok) throw new Error(d?.erro ?? `api ${r.status}`);
     return d;
   };
+  const guardarMidia = async ({ de, para, mime, bytes }) => {
+    const r = await fetch(`${base}/captura/midia`, {
+      method: 'POST',
+      headers: { 'content-type': mime, 'x-gateway-segredo': h['x-gateway-segredo'], 'x-canal': para, 'x-de': de },
+      body: bytes,
+    });
+    const d = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(d?.erro ?? `api ${r.status}`);
+    return d;
+  };
+
   return {
+    guardarMidia,
     canais: () => chamar('/captura/canais'),
     marcarConectado: (n) => chamar(`/captura/canais/${n}/conectado`, 'POST'),
     entregarMensagem: (m) => chamar('/captura/mensagens', 'POST', m),
@@ -78,13 +90,33 @@ test('a mesma mensagem que chega duas vezes entra uma', async () => {
   assert.equal(dois.repetida, true, 'reconexão reentrega — e não pode duplicar o relato');
 });
 
-test('o que entra vira relato de verdade na API', async () => {
+test('o áudio sobe primeiro, e a mensagem sai apontando para ele', async () => {
   const receber = criarRecebedor({ api: clienteApi(), registro: mudo });
-  const r = await receber({ id: 'nova-1', de: TEL, para: NUMERO, tipo: 'audio', midiaRef: 'b.ogg' });
+  const r = await receber({
+    id: 'nova-1', de: TEL, para: NUMERO, tipo: 'audio',
+    bytes: Buffer.from('OggS voz de gente no meio da lavoura'), mime: 'audio/ogg; codecs=opus',
+  });
   assert.equal(r.desfecho, 'relato_aguardando_extracao');
 
   const fila = await req('/captura/relatos', { token: tGestor });
   assert.ok(fila.corpo.length >= 2);
+  assert.ok(fila.corpo.some((x) => x.midia_id), 'o relato do áudio aponta para a mídia');
+});
+
+test('mídia que não sobe não derruba a mensagem', async () => {
+  // O produtor mandou e vai cobrar. Sem o áudio o relato fica pobre, mas o
+  // consultor ao menos vê que chegou algo dele — silêncio seria pior.
+  const quebrado = { ...clienteApi(), guardarMidia: async () => { throw new Error('armazém fora'); } };
+  const registrado = [];
+  const receber = criarRecebedor({ api: quebrado, registro: { ...mudo, error: (m) => registrado.push(m) } });
+
+  const r = await receber({
+    id: 'nova-2', de: TEL, para: NUMERO, tipo: 'imagem',
+    bytes: Buffer.from('\xff\xd8\xff foto da soja'), mime: 'image/jpeg',
+  });
+  assert.equal(r.desfecho, 'relato_aguardando_extracao');
+  assert.match(registrado[0], /armazém fora/);
+  assert.match(registrado[0], new RegExp(TEL));
 });
 
 test('falha da API não faz a mensagem sumir em silêncio', async () => {

@@ -23,6 +23,29 @@ services:
       timeout: 5s
       retries: 20
 
+  # --- Armazém de objetos (MinIO) ---
+  #
+  # Sobe sempre, junto com o banco, porque é o caminho que produção usa: um
+  # backend exercitado só em produção é um backend não testado. O adaptador de
+  # disco continua existindo para quem não quiser subir nada, e o teste roda
+  # nos dois.
+  armazem:
+    image: minio/minio:latest
+    container_name: colheitai-armazem
+    restart: unless-stopped
+    command: server /dados --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_CHAVE}
+      MINIO_ROOT_PASSWORD: ${S3_SEGREDO}
+    volumes:
+      - colheitai-midia:/dados
+    networks: [colheitai-net]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   # --- API (Node) ---
   api:
     build:
@@ -45,6 +68,12 @@ services:
       VAPID_PRIVADA: ${VAPID_PRIVADA}
       VAPID_CONTATO: ${VAPID_CONTATO}
       GATEWAY_SEGREDO: ${GATEWAY_SEGREDO}
+      ARMAZEM: ${ARMAZEM}
+      S3_ENDPOINT: http://armazem:9000
+      S3_BUCKET: ${S3_BUCKET}
+      S3_CHAVE: ${S3_CHAVE}
+      S3_SEGREDO: ${S3_SEGREDO}
+      MIDIA_DIR: /dados/midia
     ports:
       - "${API_PORT}:3000"
     volumes:
@@ -54,8 +83,11 @@ services:
       - ./test:/app/test:ro
       - ./web:/app/web:ro
       - ./gateway/src:/app/gateway/src:ro
+      - colheitai-midia-disco:/dados/midia
     depends_on:
       db:
+        condition: service_healthy
+      armazem:
         condition: service_healthy
     networks: [colheitai-net]
 
@@ -76,7 +108,6 @@ services:
       API_BASE: http://api:3000
       GATEWAY_SEGREDO: ${GATEWAY_SEGREDO}
       SESSOES_DIR: /dados/sessoes
-      MIDIA_DIR: /dados/midia
     volumes:
       - colheitai-whatsapp:/dados
       - ./gateway/src:/app/gateway/src:ro
@@ -90,6 +121,10 @@ networks:
 
 volumes:
   colheitai-dados:
-  # Sessão pareada do WhatsApp e mídia recebida. Perder este volume significa
-  # parear os números de novo.
+  # Sessão pareada do WhatsApp. Perder este volume significa parear os números
+  # de novo. Mídia não mora mais aqui: o gateway não guarda arquivo.
   colheitai-whatsapp:
+  # Os objetos do MinIO.
+  colheitai-midia:
+  # Mídia do adaptador de disco, para quem rodar com ARMAZEM=disco.
+  colheitai-midia-disco:

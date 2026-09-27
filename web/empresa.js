@@ -33,6 +33,22 @@ async function api(caminho, { metodo = 'GET', corpo } = {}) {
   return dados;
 }
 
+/**
+ * Traz o binário e devolve uma URL de blob.
+ *
+ * `<audio src="/midia/…">` não carregaria o token — o navegador não manda
+ * cabeçalho em tag de mídia. Buscar com a sessão e tocar o blob mantém a rota
+ * privada como ela é: quem não passa pela política não recebe byte.
+ */
+async function midiaUrl(id) {
+  const resp = await fetch(`/midia/${id}`, {
+    headers: estado.token ? { authorization: `Bearer ${estado.token}` } : {},
+  });
+  if (!resp.ok) throw new Error(`mídia ${resp.status}`);
+  const blob = await resp.blob();
+  return { url: URL.createObjectURL(blob), tipo: blob.type };
+}
+
 function sair() {
   localStorage.removeItem(SESSAO);
   estado.token = null; estado.eu = null;
@@ -378,6 +394,21 @@ async function telaCampo(main) {
       el('span', r.situacao === 'pendente' ? 'etiqueta boa' : 'etiqueta',
         r.situacao === 'pendente' ? 'lido' : 'aguardando leitura'));
     c.append(topo);
+
+    // Enquanto a leitura automática não entra, o áudio é o relato inteiro —
+    // sem tocar, o consultor validaria um cartão vazio.
+    if (r.midia_id) {
+      const espaco = el('div', 'midia');
+      espaco.append(el('p', 'sub', 'carregando o anexo…'));
+      c.append(espaco);
+      midiaUrl(r.midia_id).then(({ url, tipo }) => {
+        const m = el(tipo.startsWith('audio') ? 'audio' : 'img');
+        m.src = url;
+        if (m.tagName === 'AUDIO') m.controls = true;
+        else m.alt = `foto enviada por ${r.produtor}`;
+        espaco.replaceChildren(m);
+      }).catch(() => espaco.replaceChildren(el('p', 'sub', 'não consegui abrir o anexo')));
+    }
 
     if (r.transcricao) c.append(el('p', 'obs', r.transcricao));
     if (r.extraido) {

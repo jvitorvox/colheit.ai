@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { rota, SemContexto } from '../../http/erros.js';
 import { identificar, soEmpresa } from '../../http/identificar.js';
 import * as servico from './service.js';
@@ -32,6 +32,24 @@ rotasCaptura.post('/canais/:numero/conectado', soGateway, rota(async (req, res) 
   await servico.marcarConectado(req.params.numero);
   res.json({ ok: true });
 }));
+
+/**
+ * O gateway manda o binário antes da mensagem que o acompanha.
+ *
+ * Corpo cru em vez de multipart: é um arquivo só, o tipo vem no cabeçalho e
+ * não há campo a acompanhar — menos peça para manter. O tenant sai do canal e
+ * o produtor do telefone, então o gateway não escolhe em nome de quem guarda.
+ */
+rotasCaptura.post('/midia', soGateway,
+  express.raw({ type: '*/*', limit: '12mb' }),
+  rota(async (req, res) => {
+    res.status(201).json(await servico.guardarMidia({
+      numeroDoCanal: req.get('x-canal'),
+      telefone: req.get('x-de'),
+      mime: req.get('content-type'),
+      bytes: req.body,
+    }));
+  }));
 
 rotasCaptura.get('/saidas', soGateway, rota(async (_req, res) => {
   res.json(await servico.saidasPendentes());

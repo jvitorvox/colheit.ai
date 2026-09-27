@@ -38,6 +38,13 @@ jobs:
       VAPID_PRIVADA: AenJ4IENMRG1eO4tOVg_lcCiWQMH3UYx9CBmGeUFCU0
       VAPID_CONTATO: mailto:ci@colheit.ai
       GATEWAY_SEGREDO: ci-gateway-segredo-descartavel
+      # O armazém de objetos é o caminho de produção, então é ele que o CI
+      # exercita. O adaptador de disco entra no mesmo teste, injetado.
+      ARMAZEM: s3
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: colheitai-midia
+      S3_CHAVE: colheitai
+      S3_SEGREDO: ci-descartavel
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +65,19 @@ jobs:
             alter default privileges for role $POSTGRES_USER in schema public
               grant usage, select on sequences to $APP_DB_USER;
           SQL
+
+      # MinIO como `docker run` e não como service container: a imagem precisa
+      # de argumento (`server /dados`), e service container não aceita comando.
+      - name: Subir o armazém de objetos
+        run: |
+          docker run -d --name armazem -p 9000:9000 \
+            -e MINIO_ROOT_USER=$S3_CHAVE -e MINIO_ROOT_PASSWORD=$S3_SEGREDO \
+            minio/minio:latest server /dados
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && exit 0
+            sleep 2
+          done
+          echo 'o armazém não respondeu a tempo'; docker logs armazem; exit 1
 
       - run: npm install --omit=dev
         working-directory: api

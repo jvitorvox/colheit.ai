@@ -37,9 +37,22 @@ export function criarRecebedor({ api, registro = console }) {
     const para = soDigitos(bruta.para);
     if (!de || !para) return { ignorada: true };
 
+    // O binário sobe primeiro, e o que segue na mensagem é o identificador.
+    // Se a subida falhar, a mensagem vai mesmo assim: o produtor mandou e vai
+    // cobrar — o consultor ao menos vê que chegou algo dele, o que é melhor do
+    // que o silêncio de uma mensagem descartada.
+    let midiaId = null;
+    if (bruta.bytes?.length) {
+      try {
+        midiaId = (await api.guardarMidia({ de, para, mime: bruta.mime, bytes: bruta.bytes })).id;
+      } catch (erro) {
+        registro.error?.(`falhou a mídia de ${de}: ${erro.message}`);
+      }
+    }
+
     try {
       const r = await api.entregarMensagem({
-        de, para, tipo: bruta.tipo, texto: bruta.texto ?? null, midiaRef: bruta.midiaRef ?? null,
+        de, para, tipo: bruta.tipo, texto: bruta.texto ?? null, midiaId,
       });
       registro.info?.(`entrada ${bruta.tipo} de ${de}: ${r.desfecho}`);
       return r;

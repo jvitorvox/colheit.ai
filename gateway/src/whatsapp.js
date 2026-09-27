@@ -1,6 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import makeWASocket, {
   useMultiFileAuthState, DisconnectReason, downloadMediaMessage, Browsers,
 } from '@whiskeysockets/baileys';
@@ -16,7 +15,6 @@ import pino from 'pino';
 // estrago parar num cliente, e o portal continua de pé sozinho.
 
 const SESSOES = process.env.SESSOES_DIR ?? '/dados/sessoes';
-const MIDIA = process.env.MIDIA_DIR ?? '/dados/midia';
 const silencioso = pino({ level: 'silent' });
 
 const TIPOS = {
@@ -28,7 +26,6 @@ const TIPOS = {
 
 export async function abrirConexao({ numero, aoReceber, aoConectar, aoCair }) {
   await mkdir(join(SESSOES, numero), { recursive: true });
-  await mkdir(MIDIA, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(join(SESSOES, numero));
   let sock;
@@ -96,18 +93,20 @@ async function traduzir(m, sock) {
       ?? m.message?.extendedTextMessage?.text
       ?? m.message?.imageMessage?.caption
       ?? null,
-    midiaRef: null,
+    bytes: null,
+    mime: null,
   };
 
   if (bruta.deMim || bruta.deGrupo || bruta.deStatus) return bruta;
 
   if (tipo === 'audio' || tipo === 'imagem') {
-    // O binário não vai para o banco: fica no volume, e o que trafega é o
-    // ponteiro. Armazenamento de verdade entra quando houver — aqui é disco.
-    const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: silencioso, reuploadRequest: sock.updateMediaMessage });
-    const nome = `${randomUUID()}.${tipo === 'audio' ? 'ogg' : 'jpg'}`;
-    await writeFile(join(MIDIA, nome), buffer);
-    bruta.midiaRef = nome;
+    // O binário passa pela memória e vai direto para a API — o gateway não
+    // guarda arquivo. Disco de contêiner não tem política nem dono, e áudio de
+    // produtor descrevendo a própria lavoura é o dado mais sensível daqui.
+    bruta.bytes = await downloadMediaMessage(m, 'buffer', {},
+      { logger: silencioso, reuploadRequest: sock.updateMediaMessage });
+    bruta.mime = m.message?.[chave]?.mimetype
+      ?? (tipo === 'audio' ? 'audio/ogg' : 'image/jpeg');
   }
 
   return bruta;

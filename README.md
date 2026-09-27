@@ -577,18 +577,58 @@ o banco recusa o contrário. Aqui não há o que julgar.
 bloqueio vier não haverá a quem recorrer. Um número por tenant existe para o
 estrago parar num cliente, e o portal continua de pé sozinho.
 
+## Armazenamento de mídia
+
+Áudio de produtor descrevendo a própria lavoura é o dado mais sensível que o
+projeto captura. Ele não fica em disco de contêiner, e **nunca** tem URL
+pública.
+
+```
+gateway  --(bytes crus)-->  POST /captura/midia  -->  armazém
+                                    |
+                              tabela `midia` (tenant, produtor, política)
+                                    |
+navegador  <--(blob)--  GET /midia/:id  <-- a política decide antes do byte sair
+```
+
+O gateway não diz de quem é o arquivo: manda o canal e o remetente, e a API
+resolve o tenant pelo canal e o produtor pelo telefone. Assim ele não guarda
+nada em nome de quem não deve.
+
+### Dois armazéns atrás da mesma porta
+
+| `ARMAZEM` | Onde | Para quê |
+|---|---|---|
+| `s3` (padrão) | MinIO do compose, ou S3 de verdade | o caminho de produção |
+| `disco` | `MIDIA_DIR` | para quem não quiser subir contêiner |
+
+O MinIO sobe junto com o banco, de propósito: um backend exercitado só em
+produção é um backend não testado. O teste roda o mesmo guardar/baixar nos
+dois.
+
+### O que o módulo decide
+
+| Regra | Por quê |
+|---|---|
+| lista fechada de MIME, 12 MB | o canal não pode virar porta de entrada de arquivo qualquer |
+| `audio/ogg; codecs=opus` vira `audio/ogg` | o parâmetro é codificação, não tipo — separaria o mesmo formato em duas famílias |
+| mesmo sha256 no mesmo tenant reaproveita a linha | reconexão do gateway reentrega o áudio, e duas cópias do mesmo minuto são só custo |
+| se o `insert` falhar, o objeto é apagado | senão fica lixo que ninguém alcança e ninguém apagaria |
+| `cache-control: private` | cache compartilhado guardando áudio de produtor é o mesmo vazamento por outro caminho |
+| chave é normalizada antes de virar caminho | `../` escrevendo fora do lugar é o erro clássico do adaptador de disco |
+
+A política é a de sempre: a empresa vê o que é do tenant dela, o produtor
+alcança o que ele mesmo mandou (`with check (false)` — ele lê, não escreve), e
+mais ninguém.
+
+Se a subida falhar, a **mensagem vai mesmo assim**. O produtor mandou e vai
+cobrar; o consultor ao menos vê que chegou algo dele, o que é melhor do que o
+silêncio de uma mensagem descartada.
+
 ## O que ainda não está aqui
 
+O extrator de IA, que espera o plano sem-treino do provedor — a fila fica
+guardada em `aguardando_extracao` e entra de uma vez quando ele entrar.
 
-
-
-
-
-
-
-
-
-
-
-O extrator de IA, que espera o plano sem-treino do provedor. E armazenamento de verdade para a mídia: hoje o áudio e a foto ficam num volume de disco. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
-testa `app.aplicar_isolamento` de forma independente do domínio.
+`002_exemplo_isolamento.sql` fica: testa `app.aplicar_isolamento` de forma
+independente do domínio.

@@ -6,6 +6,7 @@ import { extrair, extratorLigado } from './extrator.js';
 import * as pedidos from '../pedidos/service.js';
 import * as visitas from '../visitas/service.js';
 import * as caderno from '../caderno/service.js';
+import * as midia from '../midia/service.js';
 import { textoObrigatorio, umDe, uuidValido } from '../cadastro/validar.js';
 
 // Fala com pedidos pelo SERVICE, nunca pelo repository dele. É a regra da
@@ -47,7 +48,7 @@ export async function receber(entrada) {
   const msg = await repo.gravarEntrada(dono, {
     tenantId, telefone, tipo,
     texto: entrada.texto ?? null,
-    midiaRef: entrada.midiaRef ?? null,
+    midiaId: entrada.midiaId ?? null,
     produtorId: quem.produtorId, usuarioId: quem.usuarioId,
   });
 
@@ -71,7 +72,7 @@ export async function receber(entrada) {
     return { mensagemId: msg.id, desfecho: 'guardado', nota: 'relato de consultor depende da extração' };
   }
 
-  const lido = await extrair({ tipo, texto: entrada.texto, midiaRef: entrada.midiaRef });
+  const lido = await extrair({ tipo, texto: entrada.texto, midiaId: entrada.midiaId });
   const relatoId = await repo.criarRelato(dono, {
     mensagemId: msg.id, tenantId, produtorId: quem.produtorId,
     tipo: lido?.tipo ?? 'lavoura',
@@ -176,7 +177,7 @@ export async function extrairPendentes({ limite = 100 } = {}) {
   const fila = await repo.aguardandoExtracao(dono, limite);
   let n = 0;
   for (const r of fila) {
-    const lido = await extrair({ tipo: r.tipo, texto: r.texto, midiaRef: r.midia_ref });
+    const lido = await extrair({ tipo: r.tipo, texto: r.texto, midiaId: r.midia_id });
     if (!lido) continue;
     await repo.aplicarExtracao(dono, r.id, lido.transcricao, lido.extraido, lido.tipo);
     n++;
@@ -188,3 +189,20 @@ export async function extrairPendentes({ limite = 100 } = {}) {
 
 export const canaisAtivos = () => repo.canaisAtivos(dono);
 export const marcarConectado = (numero) => repo.marcarConectado(dono, soDigitos(numero));
+
+/* ------------------------------------------------------- mídia (gateway) */
+
+/**
+ * Guarda o binário que o gateway recebeu, antes da mensagem que o acompanha.
+ *
+ * O tenant sai do canal e o produtor sai do telefone — o gateway não informa
+ * nem um nem outro. Assim ele não guarda arquivo em nome de quem quiser, e
+ * mídia de número desconhecido nasce sem dono, alcançável só pela empresa.
+ */
+export async function guardarMidia({ numeroDoCanal, telefone, mime, bytes }) {
+  const tenantId = await repo.tenantDoNumero(dono, soDigitos(numeroDoCanal));
+  if (!tenantId) throw new NaoEncontrado('canal');
+
+  const quem = await repo.identificar(dono, soDigitos(telefone), tenantId);
+  return midia.guardar({ tenantId, produtorId: quem.produtorId, mime, bytes });
+}
