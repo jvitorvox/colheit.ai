@@ -1,19 +1,32 @@
-import { SemContexto } from './erros.js';
+import { lerToken } from '../modulos/auth/token.js';
+import { SemContexto, ErroDeUso } from './erros.js';
 
 /**
- * Descobre quem está falando e deixa em req.ctx = { tenant, usuario }.
+ * Descobre quem está falando e deixa em req.ctx.
  *
- * ⚠️ PROVISÓRIO: hoje lê de cabeçalhos, sem autenticação nenhuma. Isto existe
- * para o módulo cadastro poder ser construído e testado antes do módulo de
- * autenticação — e é a ÚNICA porta por onde o contexto entra, de propósito:
- * quando o login existir, só este arquivo muda.
- *
- * Nunca subir para produção assim. O CI não valida isso; a revisão precisa.
+ * É a única porta por onde o contexto entra. Sessão de empresa traz
+ * { tenant, usuario, papel }; sessão do portal traz { produtor }. Nunca as duas.
  */
 export function identificar(req, _res, next) {
-  const tenant = req.get('x-tenant-id') || null;
-  const usuario = req.get('x-usuario-id') || null;
-  if (!tenant) return next(new SemContexto());
-  req.ctx = { tenant, usuario };
+  const cabecalho = req.get('authorization') ?? '';
+  const [esquema, bruto] = cabecalho.split(' ');
+  if (!bruto || esquema.toLowerCase() !== 'bearer') return next(new SemContexto());
+
+  const ctx = lerToken(bruto);
+  if (!ctx) return next(new SemContexto());
+
+  req.ctx = ctx;
+  next();
+}
+
+/** Fecha a rota para a sessão do portal — o que é de empresa é de empresa. */
+export function soEmpresa(req, _res, next) {
+  if (!req.ctx?.tenant) return next(new ErroDeUso('esta rota é da área da empresa'));
+  next();
+}
+
+/** Fecha a rota para quem não é o produtor. */
+export function soProdutor(req, _res, next) {
+  if (!req.ctx?.produtor) return next(new ErroDeUso('esta rota é do portal do produtor'));
   next();
 }

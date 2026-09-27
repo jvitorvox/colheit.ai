@@ -1,7 +1,8 @@
 import express from 'express';
 import { app as poolApp } from './db.js';
-import { identificar } from './http/identificar.js';
+import { identificar, soEmpresa } from './http/identificar.js';
 import { tratarErro } from './http/erros.js';
+import { rotasAuth } from './modulos/auth/rotas.js';
 import { rotasCadastro } from './modulos/cadastro/rotas.js';
 
 export function criarApp() {
@@ -18,8 +19,10 @@ export function criarApp() {
     }
   });
 
-  // Tudo abaixo exige contexto. Cada módulo entra com o próprio prefixo.
-  api.use('/cadastro', identificar, rotasCadastro);
+  api.use("/auth", rotasAuth);
+
+  // Cadastro é área da empresa: a sessão do portal não entra aqui.
+  api.use("/cadastro", identificar, soEmpresa, rotasCadastro);
 
   api.use((_req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
   api.use(tratarErro);

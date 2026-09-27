@@ -39,6 +39,8 @@ services:
       APP_DB_USER: ${APP_DB_USER}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       API_PORT: 3000
+      JWT_SEGREDO: ${JWT_SEGREDO}
+      AUTH_EXPOR_CODIGO: ${AUTH_EXPOR_CODIGO}
     ports:
       - "${API_PORT}:3000"
     volumes:

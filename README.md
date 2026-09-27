@@ -128,14 +128,52 @@ POST   /cadastro/carteira                        autoriza consultor sobre um pro
 de onde vem a maior parte das duplicatas, e o banco só garante que são dígitos.
 Inscrição estadual fica no formato — a regra varia por estado.
 
-### ⚠️ Autenticação ainda não existe
+## Autenticação
 
-`api/src/http/identificar.js` lê `x-tenant-id` e `x-usuario-id` de cabeçalho, **sem
-verificar nada**. Existe para o cadastro poder ser construído antes do módulo de
-login, e é a única porta por onde o contexto entra — quando a autenticação chegar,
-só aquele arquivo muda. **Não subir assim.**
+Duas identidades, de formatos diferentes — e é a cadeia que pede isso.
+
+| | Como entra | Sessão | Vê |
+|---|---|---|---|
+| `usuario` (gestor, consultor) | e-mail e senha | 12 h | o tenant dele |
+| `produtor` | telefone e código de 6 dígitos | 30 dias | o que é dele, em **todas** as revendas |
+
+Senha no produtor seria atrito na ponta de que a adoção inteira depende, e o canal
+já existe: o código é o mesmo vínculo por código do WhatsApp, e o convite sai de
+quem tem vínculo — no contrato. É o gancho que a H2 mede.
+
+```
+POST /auth/login                    e-mail e senha
+POST /auth/produtor/codigo          pede o código (responde igual para telefone conhecido ou não)
+POST /auth/produtor/entrar          telefone + código
+GET  /auth/eu                       quem sou eu, nos dois casos
+POST /auth/convites                 convida produtor (exige vínculo)
+POST /auth/usuarios/:id/senha       só gestor, e só da própria empresa
+```
+
+### O que o módulo protege
+
+- **Resposta uniforme.** E-mail inexistente, usuário sem senha e senha errada dão a
+  mesma resposta — distinguir entregaria quais e-mails existem na plataforma.
+- **Tempo uniforme.** Conta sem senha gasta o mesmo trabalho de scrypt de uma
+  conferência real; sem isso o relógio entregaria o que a mensagem esconde.
+- **Freio de força bruta** por e-mail ou telefone: cinco falhas bloqueiam 15 minutos,
+  dez bloqueiam uma hora. A falha é **gravada fora da exceção** — lançar de dentro da
+  transação provocaria rollback e o contador zeraria sozinho.
+- **Código de uso único**, com validade de 10 minutos, guardado só como hash, e pedir
+  um novo invalida o anterior.
+- **HS256 fixado na verificação.** Aceitar o algoritmo que vem no próprio token é como
+  se abre a porta para `alg: none`.
+
+### Os dois eixos de contexto
+
+`comContexto()` põe `app.tenant_id` + `app.usuario_id` **ou** `app.produtor_id` — nunca
+os dois. As políticas do produtor (migração 011) são permissivas e se somam às de
+tenant: quando um eixo está preenchido, o outro é nulo e as políticas dele não casam.
+
+A sessão do portal é de **leitura** no núcleo de cadastro, e não entra em `/cadastro`.
 
 ## O que ainda não está aqui
 
-Pedido e as dez etapas, funil, visita, catálogo — e a autenticação. `002_exemplo_isolamento.sql` fica:
+
+Pedido e as dez etapas, funil, visita, catálogo. E a captura pelo WhatsApp, que é quem entrega o código de acesso do produtor. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

@@ -28,6 +28,9 @@ jobs:
       POSTGRES_PORT: 5433
       APP_DB_USER: colheitai_app
       APP_DB_PASSWORD: ci
+      # Segredo descartável, só do CI. O de produção é secret do repositório.
+      JWT_SEGREDO: ci-apenas-32-caracteres-no-minimo-ok
+      AUTH_EXPOR_CODIGO: '1'
 
     steps:
       - uses: actions/checkout@v4

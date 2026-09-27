@@ -1,62 +1,44 @@
 // Módulo cadastro pela porta HTTP — incluindo o que ele precisa RECUSAR.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { dono, encerrar } from '../api/src/db.js';
-import { migrar } from '../api/src/migrar.js';
-import { criarApp } from '../api/src/server.js';
+import { dono, encerrar } from "../api/src/db.js";
+import { migrar } from "../api/src/migrar.js";
+import { subirApi, criarTenant, criarUsuario, entrar, limparBase } from "./ajuda.js";
 
 // CPFs com dígito verificador correto — os inválidos são testados adiante.
 const CPF_A = '12345678909';
 const CPF_B = '98765432100';
 const CNPJ = '11222333000181';
 
-let servidor, base, alfa, beta, gestor, ana;
-
-const req = (caminho, { metodo = 'GET', corpo, ctx } = {}) =>
-  fetch(base + caminho, {
-    method: metodo,
-    headers: {
-      'content-type': 'application/json',
-      ...(ctx?.tenant ? { 'x-tenant-id': ctx.tenant } : {}),
-      ...(ctx?.usuario ? { 'x-usuario-id': ctx.usuario } : {}),
-    },
-    body: corpo ? JSON.stringify(corpo) : undefined,
-  }).then(async (r) => ({ status: r.status, corpo: await r.json().catch(() => null) }));
+let req, fechar, alfa, beta, ana, tGestor, tAna, tBeta;
 
 before(async () => {
   await migrar({ silencioso: true });
-  await dono.query('truncate tenant, produtor, propriedade cascade');
+  await limparBase();
 
-  const criaTenant = async (nome, doc) => (await dono.query(
-    `insert into tenant (nome, documento, tipo) values ($1,$2,'revenda') returning id`,
-    [nome, doc])).rows[0].id;
-  alfa = await criaTenant('Revenda Alfa', '11111111000111');
-  beta = await criaTenant('Revenda Beta', '22222222000122');
+  alfa = await criarTenant("Revenda Alfa", "11111111000111");
+  beta = await criarTenant("Revenda Beta", "22222222000122");
+  await criarUsuario(alfa, "Gestora", "gestora@alfa.com", "gestor");
+  const anaId = await criarUsuario(alfa, "Ana", "ana@alfa.com", "consultor");
+  await criarUsuario(beta, "Bruno", "bruno@beta.com", "gestor");
+  ana = anaId;
 
-  const criaUsuario = async (nome, email, papel, tenant) => (await dono.query(
-    `insert into usuario (tenant_id, nome, email, papel) values ($1,$2,$3,$4) returning id`,
-    [tenant, nome, email, papel])).rows[0].id;
-  gestor = await criaUsuario('Gestora', 'gestora@alfa.com', 'gestor', alfa);
-  ana = await criaUsuario('Ana', 'ana@alfa.com', 'consultor', alfa);
-
-  servidor = criarApp().listen(0);
-  await new Promise((ok) => servidor.once('listening', ok));
-  base = `http://127.0.0.1:${servidor.address().port}`;
+  ({ req, fechar } = await subirApi());
+  tGestor = await entrar(req, "gestora@alfa.com");
+  tAna = await entrar(req, "ana@alfa.com");
+  tBeta = await entrar(req, "bruno@beta.com");
 });
 
-after(async () => {
-  await new Promise((ok) => servidor.close(ok));
-  await encerrar();
-});
+after(async () => { await fechar(); await encerrar(); });
 
-test('sem tenant no cabeçalho, a porta nem abre', async () => {
+test('sem token, a porta nem abre', async () => {
   const r = await req('/cadastro/produtores');
   assert.equal(r.status, 401);
 });
 
 test('cadastra produtor sem documento — é o caso do campo', async () => {
   const r = await req('/cadastro/produtores', {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: ana },
+    metodo: 'POST', token: tAna,
     corpo: { nome: 'Produtor Sem Documento' },
   });
   assert.equal(r.status, 201);
@@ -66,7 +48,7 @@ test('cadastra produtor sem documento — é o caso do campo', async () => {
 
 test('recusa CPF com dígito verificador errado', async () => {
   const r = await req('/cadastro/produtores', {
-    metodo: 'POST', ctx: { tenant: alfa },
+    metodo: 'POST', token: tGestor,
     corpo: { nome: 'Fulano', documentos: [{ tipo: 'cpf', valor: '11122233344' }] },
   });
   assert.equal(r.status, 400);
@@ -76,7 +58,7 @@ test('recusa CPF com dígito verificador errado', async () => {
 
 test('aceita CPF formatado e guarda só os dígitos', async () => {
   const r = await req('/cadastro/produtores', {
-    metodo: 'POST', ctx: { tenant: alfa },
+    metodo: 'POST', token: tGestor,
     corpo: { nome: 'José Cesar Sabo', documentos: [{ tipo: 'cpf', valor: '123.456.789-09' }] },
   });
   assert.equal(r.status, 201);
@@ -85,12 +67,12 @@ test('aceita CPF formatado e guarda só os dígitos', async () => {
 
 test('porta única: o mesmo CPF por outra revenda devolve o mesmo produtor', async () => {
   const naBeta = await req('/cadastro/produtores', {
-    metodo: 'POST', ctx: { tenant: beta },
+    metodo: 'POST', token: tBeta,
     corpo: { nome: 'J. C. Sabo', documentos: [{ tipo: 'cpf', valor: CPF_A }] },
   });
   assert.equal(naBeta.status, 201);
 
-  const naAlfa = await req('/cadastro/produtores', { ctx: { tenant: alfa } });
+  const naAlfa = await req('/cadastro/produtores', { token: tGestor });
   const oMesmo = naAlfa.corpo.find((p) => p.nome === 'José Cesar Sabo');
   assert.equal(naBeta.corpo.id, oMesmo.id, 'é a mesma pessoa, com dois vínculos');
 
@@ -99,39 +81,39 @@ test('porta única: o mesmo CPF por outra revenda devolve o mesmo produtor', asy
 });
 
 test('cada revenda enxerga só a carteira dela', async () => {
-  const naBeta = await req('/cadastro/produtores', { ctx: { tenant: beta } });
+  const naBeta = await req('/cadastro/produtores', { token: tBeta });
   assert.equal(naBeta.corpo.length, 1, 'a Beta não vê o produtor sem documento da Alfa');
 });
 
 test('o consultor enxerga só quem ele cadastrou', async () => {
-  const daAna = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: ana } });
+  const daAna = await req('/cadastro/produtores', { token: tAna });
   assert.deepEqual(daAna.corpo.map((p) => p.nome), ['Produtor Sem Documento']);
 
-  const daGestora = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: gestor } });
+  const daGestora = await req('/cadastro/produtores', { token: tGestor });
   assert.equal(daGestora.corpo.length, 2, 'o gestor vê a empresa inteira');
 });
 
 test('autorizar amplia a carteira do consultor', async () => {
-  const todos = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: gestor } });
+  const todos = await req('/cadastro/produtores', { token: tGestor });
   const outro = todos.corpo.find((p) => p.nome === 'José Cesar Sabo');
 
   const r = await req('/cadastro/carteira', {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: gestor },
+    metodo: 'POST', token: tGestor,
     corpo: { usuarioId: ana, produtorId: outro.id },
   });
   assert.equal(r.status, 201);
 
-  const daAna = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: ana } });
+  const daAna = await req('/cadastro/produtores', { token: tAna });
   assert.equal(daAna.corpo.length, 2);
 });
 
 test('fusão escolhe quem tem documento e guarda o ponteiro', async () => {
-  const todos = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: gestor } });
+  const todos = await req('/cadastro/produtores', { token: tGestor });
   const semDoc = todos.corpo.find((p) => p.documentos.length === 0);
   const comDoc = todos.corpo.find((p) => p.documentos.length > 0);
 
   const r = await req('/cadastro/produtores/fundir', {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: gestor },
+    metodo: 'POST', token: tGestor,
     corpo: { produtorA: semDoc.id, produtorB: comDoc.id },
   });
   assert.equal(r.status, 200);
@@ -140,16 +122,16 @@ test('fusão escolhe quem tem documento e guarda o ponteiro', async () => {
   const { rows } = await dono.query('select fundido_em from produtor where id = $1', [semDoc.id]);
   assert.equal(rows[0].fundido_em, comDoc.id, 'ninguém é apagado');
 
-  const depois = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: gestor } });
+  const depois = await req('/cadastro/produtores', { token: tGestor });
   assert.equal(depois.corpo.length, 1, 'o fundido some da lista');
 });
 
 test('propriedade nasce junto com quem a opera', async () => {
-  const todos = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: gestor } });
+  const todos = await req('/cadastro/produtores', { token: tGestor });
   const dono_ = todos.corpo[0];
 
   const r = await req('/cadastro/propriedades', {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: gestor },
+    metodo: 'POST', token: tGestor,
     corpo: {
       nome: 'Fazenda Boa Vista', produtorId: dono_.id, papel: 'proprietario',
       municipio: 'Sorriso', uf: 'MT', car: 'MT-5107925-ABC', areaHa: 840.5,
@@ -161,44 +143,44 @@ test('propriedade nasce junto com quem a opera', async () => {
 });
 
 test('arrendatário entra como segundo operador da mesma terra', async () => {
-  const props = await req('/cadastro/propriedades', { ctx: { tenant: alfa, usuario: gestor } });
+  const props = await req('/cadastro/propriedades', { token: tGestor });
   const fazenda = props.corpo[0];
 
   const arrend = await req('/cadastro/produtores', {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: gestor },
+    metodo: 'POST', token: tGestor,
     corpo: { nome: 'Quem Planta', documentos: [{ tipo: 'cnpj', valor: CNPJ }] },
   });
 
   const r = await req(`/cadastro/propriedades/${fazenda.id}/operadores`, {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: gestor },
+    metodo: 'POST', token: tGestor,
     corpo: { produtorId: arrend.corpo.id, papel: 'arrendatario' },
   });
   assert.equal(r.status, 201);
 
-  const depois = await req('/cadastro/propriedades', { ctx: { tenant: alfa, usuario: gestor } });
+  const depois = await req('/cadastro/propriedades', { token: tGestor });
   assert.equal(depois.corpo[0].operadores.length, 2, 'dono e arrendatário, na mesma fazenda');
 });
 
 test('talhão entra pela propriedade', async () => {
-  const props = await req('/cadastro/propriedades', { ctx: { tenant: alfa, usuario: gestor } });
+  const props = await req('/cadastro/propriedades', { token: tGestor });
   const fazenda = props.corpo[0];
 
   const r = await req(`/cadastro/propriedades/${fazenda.id}/talhoes`, {
-    metodo: 'POST', ctx: { tenant: alfa, usuario: gestor },
+    metodo: 'POST', token: tGestor,
     corpo: { nome: 'T-01', areaHa: 120 },
   });
   assert.equal(r.status, 201);
 
-  const lista = await req(`/cadastro/propriedades/${fazenda.id}/talhoes`, { ctx: { tenant: alfa, usuario: gestor } });
+  const lista = await req(`/cadastro/propriedades/${fazenda.id}/talhoes`, { token: tGestor });
   assert.deepEqual(lista.corpo.map((t) => t.nome), ['T-01']);
 });
 
 test('quem não tem vínculo com ninguém da terra não enxerga a terra', async () => {
-  const gama = (await dono.query(
-    `insert into tenant (nome, documento, tipo)
-     values ('Sem Relação','33333333000133','revenda') returning id`)).rows[0].id;
+  const gama = await criarTenant('Sem Relação', '33333333000133');
+  await criarUsuario(gama, 'Gil', 'gil@gama.com', 'gestor');
+  const tGama = await entrar(req, 'gil@gama.com');
 
-  const props = await req('/cadastro/propriedades', { ctx: { tenant: gama } });
+  const props = await req('/cadastro/propriedades', { token: tGama });
   assert.deepEqual(props.corpo, []);
 });
 
@@ -210,20 +192,20 @@ test('a revenda que compartilha o produtor enxerga a lavoura dele — e isso é 
   // técnica que o desenho diz ser compartilhada. O que a Beta não pode ver é a
   // camada comercial da Alfa — pedido, funil, share estimado —, e essa mora em
   // produtor_vinculo, onde o corte por tenant continua valendo.
-  const props = await req('/cadastro/propriedades', { ctx: { tenant: beta } });
+  const props = await req('/cadastro/propriedades', { token: tBeta });
   assert.equal(props.corpo.length, 1);
   assert.equal(props.corpo[0].nome, 'Fazenda Boa Vista');
 
-  const meus = await req('/cadastro/produtores', { ctx: { tenant: beta } });
+  const meus = await req('/cadastro/produtores', { token: tBeta });
   assert.equal(meus.corpo.length, 1, 'mas a carteira dela continua sendo só a dela');
 });
 
 test('não dá para pendurar terra em produtor de outro tenant', async () => {
-  const daAlfa = await req('/cadastro/produtores', { ctx: { tenant: alfa, usuario: gestor } });
+  const daAlfa = await req('/cadastro/produtores', { token: tGestor });
   const alheio = daAlfa.corpo.find((p) => p.nome === 'Quem Planta');
 
   const r = await req('/cadastro/propriedades', {
-    metodo: 'POST', ctx: { tenant: beta },
+    metodo: 'POST', token: tBeta,
     corpo: { nome: 'Fazenda Invasora', produtorId: alheio.id },
   });
   assert.equal(r.status, 400);
@@ -232,18 +214,18 @@ test('não dá para pendurar terra em produtor de outro tenant', async () => {
 
 test('recusa entrada malformada antes de chegar ao banco', async () => {
   const semNome = await req('/cadastro/produtores', {
-    metodo: 'POST', ctx: { tenant: alfa }, corpo: {},
+    metodo: 'POST', token: tGestor, corpo: {},
   });
   assert.equal(semNome.status, 400);
   assert.equal(semNome.corpo.campo, 'nome');
 
   const papelErrado = await req('/cadastro/propriedades', {
-    metodo: 'POST', ctx: { tenant: alfa },
+    metodo: 'POST', token: tGestor,
     corpo: { nome: 'X', produtorId: '00000000-0000-0000-0000-000000000000', papel: 'invasor' },
   });
   assert.equal(papelErrado.status, 400);
   assert.equal(papelErrado.corpo.campo, 'papel');
 
-  const idTorto = await req('/cadastro/produtores/nao-e-uuid', { ctx: { tenant: alfa } });
+  const idTorto = await req('/cadastro/produtores/nao-e-uuid', { token: tGestor });
   assert.equal(idTorto.status, 400);
 });
