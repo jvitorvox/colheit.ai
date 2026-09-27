@@ -79,6 +79,7 @@ const ABAS = [
   ['painel', 'Painel'],
   ['pedidos', 'Pedidos'],
   ['carteira', 'Carteira'],
+  ['catalogo', 'Catálogo'],
   ['visitas', 'Visitas'],
   ['campo', 'Do campo'],
 ];
@@ -407,6 +408,9 @@ function janela(titulo, campos, aoConfirmar, rotuloBotao = 'Confirmar') {
     form.append(el('label', 'rotulo', c.rotulo));
     const i = el(c.tipo === 'textarea' ? 'textarea' : 'input');
     if (c.tipo && c.tipo !== 'textarea') i.type = c.tipo;
+    // type=number assume step=1 e recusa decimal em silêncio: o formulário
+    // simplesmente não envia. Preço, royalties e estande têm casas.
+    if (c.tipo === 'number') i.step = 'any';
     if (c.valor) i.value = c.valor;
     if (c.obrigatorio !== false) i.required = true;
     if (c.dica) i.placeholder = c.dica;
@@ -534,6 +538,7 @@ async function desenhar() {
   try {
     if (estado.aba === 'pedidos') await telaPedidos(main);
     else if (estado.aba === 'carteira') await telaCarteira(main);
+    else if (estado.aba === 'catalogo') await telaCatalogo(main);
     else if (estado.aba === 'visitas') await telaVisitas(main);
     else if (estado.aba === 'campo') await telaCampo(main);
     else await telaPainel(main);
@@ -637,3 +642,92 @@ function janelaVisita(alvo) {
     });
   }, 'Registrar');
 }
+
+/* --------------------------------------------------------------- catálogo */
+
+const SAFRA_ATUAL = '26/27';
+
+async function telaCatalogo(main) {
+  const [produtos, resumo] = await Promise.all([
+    api(`/catalogo/produtos?safra=${encodeURIComponent(SAFRA_ATUAL)}`),
+    api(`/catalogo/resumo?safra=${encodeURIComponent(SAFRA_ATUAL)}`),
+  ]);
+
+  const novo = el('button', 'botao', 'Novo produto');
+  novo.onclick = () => janelaProduto();
+  main.append(cabecalho('Catálogo', `safra ${SAFRA_ATUAL} · ${produtos.length} produtos`, [novo]));
+
+  if (produtos.length === 0) {
+    main.append(el('p', 'vazio', 'Nenhum produto ainda. O pedido aceita item digitado à mão até lá.'));
+  } else {
+    main.append(tabela(
+      ['Produto', 'Cultura', 'Direto', 'Distribuidor', 'Royalties', ''],
+      produtos.map((p) => {
+        const preco = (canal) => {
+          const x = p.precos.find((y) => y.canal === canal);
+          return x ? brl(x.valor) : '—';
+        };
+        const roy = p.precos[0]?.royaltiesSc;
+        const definir = el('button', 'botao vazado pequeno', 'Definir preço');
+        definir.onclick = (ev) => { ev.stopPropagation(); janelaPreco(p); };
+        return [p.nome, p.cultura ?? '—', preco('direto'), preco('distribuidor'),
+          roy ? brl(roy) : '—', definir];
+      }),
+    ));
+  }
+
+  if (resumo.length) main.append(cartaoResumo(resumo));
+}
+
+/**
+ * O que a bonificada custa.
+ *
+ * Dois preços médios lado a lado: o que o comercial acha que pratica e o que a
+ * geração de demanda de fato deixou. A diferença entre os dois é o custo da GD,
+ * e mostrá-la é o que impede o indicador de mentir.
+ */
+function cartaoResumo(resumo) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', `Vendido na safra ${SAFRA_ATUAL}`));
+  c.append(tabela(
+    ['Produto', 'Volume', 'Bonificada', 'Receita', 'Médio cobrado', 'Médio efetivo'],
+    resumo.map((r) => {
+      const caiu = r.bonificada > 0;
+      const efetivo = el('span', caiu ? 'num' : 'num', brl(r.precoMedioEfetivo));
+      if (caiu) efetivo.style.color = 'var(--sol-tinta)';
+      return [
+        r.produto, `${num(r.quantidade)} sc`,
+        r.bonificada ? `${num(r.bonificada)} sc` : '—',
+        brl(r.receita), brl(r.precoMedioCobrado), efetivo,
+      ];
+    }),
+  ));
+  if (resumo.some((r) => r.bonificada > 0)) {
+    c.append(el('p', 'sub',
+      'A diferença entre o médio cobrado e o efetivo é o que a geração de demanda custou.'));
+  }
+  return c;
+}
+
+const janelaProduto = () => janela('Novo produto', [
+  { nome: 'nome', rotulo: 'Nome' },
+  { nome: 'categoria', rotulo: 'Categoria (semente, defensivo, fertilizante, outro)',
+    valor: 'semente' },
+  { nome: 'cultura', rotulo: 'Cultura', obrigatorio: false, dica: 'milho, soja…' },
+  { nome: 'embalagem', rotulo: 'Embalagem', obrigatorio: false, dica: '60.000 sementes' },
+], (v) => api('/catalogo/produtos', { metodo: 'POST', corpo: v }), 'Criar');
+
+const janelaPreco = (p) => janela(`Preço — ${p.nome}`, [
+  { nome: 'safra', rotulo: 'Safra', valor: SAFRA_ATUAL },
+  { nome: 'canal', rotulo: 'Canal (direto ou distribuidor)', valor: 'direto' },
+  { nome: 'valor', rotulo: `Valor por ${p.unidade}`, tipo: 'number' },
+  { nome: 'royaltiesSc', rotulo: 'Royalties por saco', tipo: 'number', obrigatorio: false },
+  { nome: 'vigenteDe', rotulo: 'Vigente a partir de', tipo: 'date', obrigatorio: false },
+], (v) => api(`/catalogo/produtos/${p.id}/precos`, {
+  metodo: 'POST',
+  corpo: {
+    safra: v.safra, canal: v.canal, valor: Number(v.valor),
+    royaltiesSc: v.royaltiesSc ? Number(v.royaltiesSc) : 0,
+    vigenteDe: v.vigenteDe || null,
+  },
+}), 'Definir');

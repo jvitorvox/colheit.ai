@@ -31,9 +31,11 @@ export async function criar(cx, p) {
 export async function adicionarItens(cx, pedidoId, itens) {
   for (const i of itens) {
     await cx.query(`
-      insert into pedido_item (pedido_id, cultivar, quantidade, unidade, preco_unit)
-      values ($1,$2,$3,$4,$5)`,
-      [pedidoId, i.cultivar, i.quantidade, i.unidade, i.precoUnit]);
+      insert into pedido_item (pedido_id, produto_id, cultivar, quantidade, unidade,
+                               preco_unit, royalties_sc, bonificada)
+      values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [pedidoId, i.produtoId ?? null, i.cultivar, i.quantidade, i.unidade ?? 'sc',
+      i.precoUnit, i.royaltiesSc ?? null, i.bonificada ?? false]);
   }
 }
 
@@ -46,7 +48,8 @@ export async function buscar(cx, id) {
            pr.nome as produtor,
            coalesce((select json_agg(json_build_object(
                        'cultivar', i.cultivar, 'quantidade', i.quantidade,
-                       'unidade', i.unidade, 'precoUnit', i.preco_unit))
+                       'unidade', i.unidade, 'precoUnit', i.preco_unit,
+                       'royaltiesSc', i.royalties_sc, 'bonificada', i.bonificada))
                        from pedido_item i where i.pedido_id = p.id), '[]'::json) as itens,
            (select row_to_json(n) from (
               select numero, chave, valor, emitida_em, vencimento,

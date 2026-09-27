@@ -1,6 +1,7 @@
 import { comContexto } from '../../contexto.js';
 import { ErroDeUso, NaoEncontrado } from '../../http/erros.js';
 import * as repo from './repository.js';
+import * as catalogo from '../catalogo/service.js';
 import {
   textoObrigatorio, umDe, uuidValido, areaValida,
 } from '../cadastro/validar.js';
@@ -15,12 +16,13 @@ const CREDITOS = ['pendente', 'aprovado', 'recusado'];
 
 /* ------------------------------------------------------------------ criar */
 
-export function criar(ctx, corpo) {
+export async function criar(ctx, corpo) {
   const numero = textoObrigatorio(corpo.numero, 'numero', 40);
   const safra = textoObrigatorio(corpo.safra, 'safra', 10);
   const produtorId = uuidValido(corpo.produtorId, 'produtorId');
   const propriedadeId = corpo.propriedadeId ? uuidValido(corpo.propriedadeId, 'propriedadeId') : null;
-  const itens = normalizarItens(corpo.itens);
+  const canal = umDe(corpo.canal, ['direto', 'distribuidor'], 'canal', 'direto');
+  const itens = await carimbarPrecos(ctx, normalizarItens(corpo.itens), safra, canal);
 
   return comContexto(ctx, async (cx) => {
     if (!(await repo.produtorTemVinculo(cx, produtorId))) {
@@ -44,18 +46,56 @@ export function criar(ctx, corpo) {
   });
 }
 
+/**
+ * Carimba no item o preço e os royalties que valiam na hora da venda.
+ *
+ * Mesma razão do carimbo de território: tabela nova não pode reescrever pedido
+ * velho. "Por que este pedido saiu por outro preço" é a primeira pergunta do
+ * financeiro, e ela só tem resposta se o número ficar guardado na linha.
+ *
+ * Quem informa o preço à mão manda nele — item digitado continua válido, e o
+ * catálogo não é obrigatório para abrir pedido.
+ */
+async function carimbarPrecos(ctx, itens, safra, canal) {
+  const prontos = [];
+  for (const i of itens) {
+    if (!i.produtoId) { prontos.push(i); continue; }
+    const p = await catalogo.precoParaVenda(ctx, { produtoId: i.produtoId, safra, canal });
+    prontos.push({
+      ...i,
+      cultivar: i.cultivar ?? p.nome,
+      unidade: i.unidade ?? p.unidade,
+      precoUnit: i.bonificada ? 0 : (i.precoUnit ?? p.valor),
+      // Bonificada não cobra o saco, mas o royalty do detentor da tecnologia
+      // continua devido — é o que torna a geração de demanda cara de verdade.
+      royaltiesSc: i.royaltiesSc ?? p.royaltiesSc,
+    });
+  }
+  return prontos;
+}
+
 function normalizarItens(lista) {
   if (!Array.isArray(lista) || lista.length === 0) {
     throw new ErroDeUso('o pedido precisa de ao menos um item', 'itens');
   }
-  return lista.map((i, n) => ({
-    cultivar: textoObrigatorio(i.cultivar, `itens[${n}].cultivar`, 60),
-    quantidade: areaValida(i.quantidade, `itens[${n}].quantidade`)
-      ?? (() => { throw new ErroDeUso('quantidade é obrigatória', `itens[${n}].quantidade`); })(),
-    unidade: i.unidade ? textoObrigatorio(i.unidade, `itens[${n}].unidade`, 6) : 'sc',
-    precoUnit: i.precoUnit === undefined || i.precoUnit === null ? null
-      : areaValida(i.precoUnit, `itens[${n}].precoUnit`),
-  }));
+  return lista.map((i, n) => {
+    const produtoId = i.produtoId ? uuidValido(i.produtoId, `itens[${n}].produtoId`) : null;
+    // Com produto do catálogo, o nome vem de lá; digitando à mão, é obrigatório.
+    const cultivar = produtoId && !i.cultivar
+      ? null : textoObrigatorio(i.cultivar, `itens[${n}].cultivar`, 60);
+    return {
+      produtoId,
+      cultivar,
+      quantidade: areaValida(i.quantidade, `itens[${n}].quantidade`)
+        ?? (() => { throw new ErroDeUso('quantidade é obrigatória', `itens[${n}].quantidade`); })(),
+      unidade: i.unidade ? textoObrigatorio(i.unidade, `itens[${n}].unidade`, 6) : null,
+      precoUnit: i.precoUnit === undefined || i.precoUnit === null ? null
+        : areaValida(i.precoUnit, `itens[${n}].precoUnit`),
+      royaltiesSc: i.royaltiesSc === undefined || i.royaltiesSc === null ? null
+        : areaValida(i.royaltiesSc, `itens[${n}].royaltiesSc`),
+      bonificada: Boolean(i.bonificada),
+    };
+  });
 }
 
 /* ------------------------------------------------------------------ etapas */

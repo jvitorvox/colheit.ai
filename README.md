@@ -416,6 +416,45 @@ Relato de tipo `visita` validado pelo consultor **vira visita de verdade**, com
 `canal = 'whatsapp'`. Sem isso os dois caminhos nunca seriam comparáveis — e é
 exatamente a comparação que a H1 revisada pede.
 
+## Catálogo
+
+Produto, preço por safra e canal, royalties. O bench classificou royalties como
+**requisito de entrada**, não diferencial: sem eles não se vende para quem
+trabalha com semente certificada.
+
+```
+GET   /catalogo/produtos              com o preço vigente de cada canal
+POST  /catalogo/produtos
+PATCH /catalogo/produtos/:id/arquivar
+GET   /catalogo/produtos/:id/precos   o histórico completo
+POST  /catalogo/produtos/:id/precos   nova vigência — nunca sobrescreve
+GET   /catalogo/resumo                volume, receita e o custo da bonificada
+```
+
+### Categoria genérica desde o primeiro dia
+
+`produto.categoria` já aceita defensivo e fertilizante mesmo entregando só
+semente. É a decisão da seção 18 do desenho, e a diferença entre **acrescentar
+uma linha e migrar a base com cliente rodando**.
+
+### Preço não se sobrescreve
+
+Cada vigência é uma linha, e o item do pedido **carimba o valor e os royalties da
+hora da venda** — mesma razão do carimbo de território. "Por que este pedido saiu
+por outro preço" é a primeira pergunta do financeiro, e ela só tem resposta se o
+número ficar guardado na linha.
+
+O catálogo não é obrigatório: item digitado à mão continua abrindo pedido.
+
+### A bonificada, que faz o número mentir
+
+Semente de geração de demanda entra no volume e não entra na receita. O resumo
+mostra **dois preços médios** — o cobrado e o efetivo —, e a diferença entre eles
+é o que a GD custou.
+
+O saco não é cobrado, mas **o royalty do detentor da tecnologia continua devido**.
+É o que torna a geração de demanda cara de verdade.
+
 ## O que ainda não está aqui
 
 
@@ -425,5 +464,6 @@ exatamente a comparação que a H1 revisada pede.
 
 
 
-Funil de prospecção e catálogo. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+Funil de prospecção. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

@@ -10,6 +10,7 @@ import { rotasPedidos } from './modulos/pedidos/rotas.js';
 import { rotasPush } from './modulos/push/rotas.js';
 import { rotasCaptura } from './modulos/captura/rotas.js';
 import { rotasVisitas } from './modulos/visitas/rotas.js';
+import { rotasCatalogo } from './modulos/catalogo/rotas.js';
 
 const RAIZ_WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 
@@ -51,6 +52,7 @@ export function criarApp() {
   api.use('/push', rotasPush);
   api.use('/captura', rotasCaptura);
   api.use('/visitas', rotasVisitas);
+  api.use('/catalogo', rotasCatalogo);
 
   api.use((_req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
   api.use(tratarErro);
