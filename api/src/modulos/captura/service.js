@@ -4,6 +4,7 @@ import { ErroDeUso, NaoEncontrado } from '../../http/erros.js';
 import * as repo from './repository.js';
 import { extrair, extratorLigado } from './extrator.js';
 import * as pedidos from '../pedidos/service.js';
+import * as visitas from '../visitas/service.js';
 import { textoObrigatorio, umDe, uuidValido } from '../cadastro/validar.js';
 
 // Fala com pedidos pelo SERVICE, nunca pelo repository dele. É a regra da
@@ -139,12 +140,21 @@ export function decidir(ctx, id, acao, corpo = {}) {
   if (situacao === 'descartado') textoObrigatorio(corpo.observacao, 'observacao', 300);
   const talhaoId = corpo.talhaoId ? uuidValido(corpo.talhaoId, 'talhaoId') : null;
 
-  return comContexto(ctx, async (cx) => {
+  const decidido = comContexto(ctx, async (cx) => {
     const r = await repo.buscarRelato(cx, id);
     if (!r) throw new NaoEncontrado('relato');
     const n = await repo.decidirRelato(cx, id, situacao, corpo.observacao, talhaoId);
     if (n === 0) throw new ErroDeUso(`relato já ${r.situacao}`);
     return repo.buscarRelato(cx, id);
+  });
+
+  // Relato de visita validado vira visita de verdade. É o ponto onde o áudio
+  // do WhatsApp entra na mesma tabela do formulário — sem isso os dois canais
+  // nunca seriam comparáveis, e a H1 revisada pede exatamente essa comparação.
+  return decidido.then(async (r) => {
+    if (r.situacao !== 'validado' || r.tipo !== 'visita') return r;
+    await visitas.registrarDeRelato(ctx, r, corpo.duracaoSeg);
+    return r;
   });
 }
 

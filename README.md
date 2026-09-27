@@ -381,6 +381,41 @@ O service worker **deixa `/empresa` de fora**. É aplicação de mesa, com conex
 guardar a casca só serviria para servir versão velha a quem trabalha o dia
 inteiro nela.
 
+## Registro de visita — e a H1 medida
+
+A H1 diz que o consultor registra a visita se for rápido o bastante, com mediana
+abaixo de 60 segundos, e que sem isso não há dado nem produto. É a hipótese que
+mata o projeto sozinha.
+
+Por isso `visita` guarda **`duracao_seg` e `canal`**: a H1 deixa de depender de um
+dia de campo com cronômetro e passa a ser medida em toda visita, comparando o áudio
+no WhatsApp com o formulário do aplicativo.
+
+```
+GET  /visitas            histórico (o produtor vê as da lavoura dele)
+GET  /visitas/fila       a fila do dia — só empresa
+GET  /visitas/h1         mediana e p90 por canal, com o veredito — só empresa
+POST /visitas            registra
+```
+
+O console cronometra a si mesmo: o relógio começa quando a janela abre e para no
+envio. Vem do cliente, então é indicativo — serve para ver tendência e comparar
+canais, não para cobrar ninguém. Registro acima de trinta minutos é descartado: é
+aba esquecida aberta, e envenenaria a mediana que decide o produto.
+
+### A fila do dia
+
+Ordena por tempo sem visita **pesado pela área**, com corte em 15 dias — o mesmo
+que o bench encontrou no concorrente, e a tradução do "82 nunca acessados" da
+planilha de origem. Quem nunca foi visitado vem primeiro: o produtor grande que
+ninguém nunca procurou é o pior caso da carteira.
+
+### O áudio e o formulário na mesma régua
+
+Relato de tipo `visita` validado pelo consultor **vira visita de verdade**, com
+`canal = 'whatsapp'`. Sem isso os dois caminhos nunca seriam comparáveis — e é
+exatamente a comparação que a H1 revisada pede.
+
 ## O que ainda não está aqui
 
 
@@ -389,5 +424,6 @@ inteiro nela.
 
 
 
-Funil de prospecção, registro de visita e catálogo. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+Funil de prospecção e catálogo. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

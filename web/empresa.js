@@ -79,6 +79,7 @@ const ABAS = [
   ['painel', 'Painel'],
   ['pedidos', 'Pedidos'],
   ['carteira', 'Carteira'],
+  ['visitas', 'Visitas'],
   ['campo', 'Do campo'],
 ];
 
@@ -518,15 +519,22 @@ function alerta(texto) {
 
 async function desenhar() {
   if (!estado.token) { telaEntrar(); return; }
+  // Se a identidade não carrega, a sessão não serve para nada — token de uma
+  // conta que não existe mais devolve 404, não 401, e engolir isso em silêncio
+  // deixava a tela em branco sem dizer por quê.
   try {
     if (!estado.eu) estado.eu = await api('/auth/eu');
     if (estado.eu.tipo !== 'usuario') { sair(); return; }
-  } catch { return; }
+  } catch (e) {
+    if (e.message !== 'sessão expirada') sair();
+    return;
+  }
 
   const main = casca();
   try {
     if (estado.aba === 'pedidos') await telaPedidos(main);
     else if (estado.aba === 'carteira') await telaCarteira(main);
+    else if (estado.aba === 'visitas') await telaVisitas(main);
     else if (estado.aba === 'campo') await telaCampo(main);
     else await telaPainel(main);
   } catch (e) {
@@ -535,3 +543,97 @@ async function desenhar() {
 }
 
 desenhar();
+
+/* ---------------------------------------------------------------- visitas */
+
+async function telaVisitas(main) {
+  const [fila, h1] = await Promise.all([api('/visitas/fila'), api('/visitas/h1')]);
+
+  main.append(cabecalho('Visitas',
+    `fila por tempo sem visita, pesada pela área · corte em ${fila[0]?.corteDias ?? 15} dias`));
+
+  // A H1 em cima da tela. Ela decide o produto, então não fica escondida num
+  // relatório: quem opera vê o número todo dia.
+  main.append(painelH1(h1));
+
+  if (fila.length === 0) {
+    main.append(el('p', 'vazio', 'Nenhum produtor na carteira ainda.'));
+    return;
+  }
+
+  main.append(tabela(
+    ['Produtor', 'Município', 'Área', 'Última visita', 'Sem visita', ''],
+    fila.map((f) => {
+      const registrar = el('button', 'botao pequeno', 'Registrar visita');
+      registrar.onclick = (ev) => { ev.stopPropagation(); janelaVisita(f); };
+      return [
+        f.produtor,
+        f.municipio ?? '—',
+        f.area_ha ? `${num(f.area_ha)} ha` : '—',
+        f.nunca ? el('span', 'etiqueta', 'nunca') : dia(f.ultima_em),
+        f.atrasado
+          ? el('span', 'selo ruim', f.nunca ? 'nunca visitado' : `${f.dias} dias`)
+          : el('span', 'etiqueta boa', `${f.dias} dias`),
+        registrar,
+      ];
+    }),
+  ));
+}
+
+function painelH1(h1) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', `H1 · registro de visita — últimos ${h1.janelaDias} dias`));
+
+  if (h1.medidas === 0) {
+    c.append(el('p', 'sub',
+      'Nenhum registro cronometrado ainda. A mediana aparece aqui assim que houver.'));
+    return c;
+  }
+
+  const grade = el('div', 'numeros');
+  h1.porCanal.forEach((canal) => {
+    const bom = canal.mediana_seg !== null && canal.mediana_seg < h1.confirmaAbaixoDe;
+    const ruim = canal.mediana_seg !== null && canal.mediana_seg > h1.mataAcimaDe;
+    const cartao = numeroCartao(
+      canal.canal === 'whatsapp' ? 'Áudio no WhatsApp' : 'Formulário no app',
+      canal.mediana_seg === null ? '—' : `${canal.mediana_seg}s`,
+      `mediana · ${canal.visitas} visita(s) · p90 ${canal.p90_seg ?? '—'}s`,
+    );
+    const veredito = el('span', bom ? 'selo feito' : ruim ? 'selo ruim' : 'selo',
+      bom ? 'confirma' : ruim ? 'mata' : 'na faixa cinzenta');
+    cartao.append(veredito);
+    grade.append(cartao);
+  });
+  c.append(grade);
+  c.append(el('p', 'sub',
+    `Abaixo de ${h1.confirmaAbaixoDe}s confirma a hipótese; acima de ${h1.mataAcimaDe}s a derruba.`));
+  return c;
+}
+
+/**
+ * O registro cronometra a si mesmo.
+ *
+ * O relógio começa quando a janela abre e para no envio — é a medição contínua
+ * da H1, em vez de um dia de campo com cronômetro uma vez só. Vem do cliente,
+ * então é indicativo: serve para ver tendência e comparar canais.
+ */
+function janelaVisita(alvo) {
+  const comecou = Date.now();
+  janela(`Visita — ${alvo.produtor}`, [
+    { nome: 'estagio', rotulo: 'Estágio da cultura', obrigatorio: false, dica: 'V4, R1…' },
+    { nome: 'estande', rotulo: 'Estande (mil plantas/ha)', tipo: 'number', obrigatorio: false },
+    { nome: 'observacao', rotulo: 'O que você viu', tipo: 'textarea', obrigatorio: false },
+  ], async (v) => {
+    await api('/visitas', {
+      metodo: 'POST',
+      corpo: {
+        produtorId: alvo.produtor_id,
+        canal: 'app',
+        duracaoSeg: Math.round((Date.now() - comecou) / 1000),
+        estagio: v.estagio || null,
+        estande: v.estande ? Number(v.estande) : null,
+        observacao: v.observacao || null,
+      },
+    });
+  }, 'Registrar');
+}
