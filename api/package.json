@@ -9,6 +9,7 @@
     "teste": "node --test --test-concurrency=1 ../test/*.test.js"
   },
   "dependencies": {
+    "express": "^4.21.2",
     "pg": "^8.13.1"
   }
 }

@@ -106,7 +106,36 @@ entra na própria carteira no mesmo ato, senão perderia de vista o que acabou d
 e o dono da terra também é cliente. O CAR é chave natural do **imóvel**, nunca do
 produtor, e é opcional: é autodeclarado e uma fazenda pode abranger mais de um.
 
+## Módulo cadastro
+
+Primeiro módulo com camada de API. A estrutura é a regra da seção 13 do desenho —
+`rota -> service -> repository`, **o SQL vive só no repository**, e nenhum módulo
+importa o repository de outro.
+
+```
+POST   /cadastro/produtores                      cadastra ou reconhece (porta única)
+GET    /cadastro/produtores                      a carteira que o contexto permite ver
+POST   /cadastro/produtores/:id/documentos       acrescenta CPF, CNPJ ou IE
+POST   /cadastro/produtores/fundir               resolve duplicata, sem apagar ninguém
+POST   /cadastro/propriedades                    cria a terra junto com quem a opera
+POST   /cadastro/propriedades/:id/operadores     arrendatário entra como segundo papel
+PATCH  /cadastro/operadores/:id/encerrar         fecha o período, mantém o histórico
+POST   /cadastro/propriedades/:id/talhoes        talhão
+POST   /cadastro/carteira                        autoriza consultor sobre um produtor
+```
+
+**Documento é validado com dígito verificador**, não só formato: erro de digitação é
+de onde vem a maior parte das duplicatas, e o banco só garante que são dígitos.
+Inscrição estadual fica no formato — a regra varia por estado.
+
+### ⚠️ Autenticação ainda não existe
+
+`api/src/http/identificar.js` lê `x-tenant-id` e `x-usuario-id` de cabeçalho, **sem
+verificar nada**. Existe para o cadastro poder ser construído antes do módulo de
+login, e é a única porta por onde o contexto entra — quando a autenticação chegar,
+só aquele arquivo muda. **Não subir assim.**
+
 ## O que ainda não está aqui
 
-Pedido e as dez etapas, funil, visita, catálogo. `002_exemplo_isolamento.sql` fica:
+Pedido e as dez etapas, funil, visita, catálogo — e a autenticação. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.
