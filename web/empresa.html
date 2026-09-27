@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>colheit.ai · empresa</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/icone-192.png">
+<link rel="stylesheet" href="/base.css">
+<style>
+/* O console é de mesa: denso, com barra lateral e tabela. O portal é de bolso.
+   São públicos diferentes — o que compartilham são os tokens, não o layout. */
+/* A grade vive em #raiz, não no body: aside e main são filhos dele, e no body
+   a coluna estreita cairia sobre o #raiz inteiro em vez de sobre a barra. */
+#raiz{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+body.entrando #raiz{display:block}
+
+aside{background:var(--papel);border-right:1px solid var(--linha);padding:18px 14px;
+  display:flex;flex-direction:column;gap:4px}
+aside .marca{font-size:1.125rem;font-weight:600;color:var(--marca);
+  padding:4px 10px 14px;letter-spacing:-.02em}
+aside button{border:none;background:none;text-align:left;padding:10px 12px;
+  border-radius:10px;color:var(--tinta-2);font-size:.9375rem}
+aside button:hover{background:var(--papel-2)}
+aside button.ativa{background:var(--marca-suave);color:var(--marca);font-weight:600}
+aside .quem{margin-top:auto;padding:12px 10px 0;border-top:1px solid var(--linha);
+  font-size:.8125rem;color:var(--tinta-3)}
+aside .quem b{display:block;color:var(--tinta);font-weight:600}
+
+main{padding:22px 26px 60px;max-width:1100px}
+.topo{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+.topo h2{font-size:1.4rem}
+.topo .acoes{margin-left:auto;display:flex;gap:8px}
+
+.numeros{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:12px;margin-bottom:18px}
+.numeros .cartao{margin:0}
+.numeros .valor{font-size:1.75rem;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.numeros .detalhe{font-size:.75rem;color:var(--tinta-3);margin-top:3px}
+
+table{width:100%;border-collapse:collapse;font-size:.9375rem}
+th{text-align:left;font-size:.6875rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--tinta-3);font-weight:400;padding:9px 10px;
+  border-bottom:1px solid var(--linha-forte)}
+td{padding:11px 10px;border-bottom:1px solid var(--linha);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.clicavel{cursor:pointer}
+tbody tr.clicavel:hover{background:var(--papel-2)}
+.tabela{background:var(--papel);border:1px solid var(--linha);border-radius:14px;
+  box-shadow:var(--sombra);overflow:hidden}
+
+.funil{display:flex;flex-direction:column;gap:5px}
+.funil .faixa-etapa{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;
+  align-items:center;font-size:.875rem}
+.funil .medidor{height:22px;background:var(--papel-2);border:1px solid var(--linha);
+  border-radius:6px;overflow:hidden}
+.funil .medidor i{display:block;height:100%;background:var(--marca-2)}
+
+.duas{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.campo{margin-bottom:12px}
+.entrada{max-width:380px;margin:14vh auto;text-align:center}
+.entrada .marca{font-size:1.75rem;color:var(--marca)}
+.entrada .sub{margin:8px 0 22px}
+.entrada form{text-align:left}
+.entrada .botao{width:100%;margin-top:14px;padding:13px;font-size:1rem}
+
+dialog{border:1px solid var(--linha);border-radius:16px;background:var(--papel);
+  color:var(--tinta);padding:20px 22px;max-width:440px;width:92vw;box-shadow:var(--sombra)}
+dialog::backdrop{background:rgba(18,26,16,.45)}
+dialog h3{margin-bottom:12px}
+dialog .fim{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+@media (max-width:760px){
+  #raiz{grid-template-columns:1fr}
+  aside{flex-direction:row;overflow-x:auto;border-right:none;
+    border-bottom:1px solid var(--linha);padding:10px}
+  aside .marca,aside .quem{display:none}
+  main{padding:16px 14px 40px}
+}
+</style>
+</head>
+<body class="entrando">
+<div id="raiz"></div>
+<dialog id="janela"></dialog>
+<script src="/empresa.js"></script>
+</body>
+</html>

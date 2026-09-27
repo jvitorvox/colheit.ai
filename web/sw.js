@@ -9,7 +9,12 @@ const VERSAO = 'v1';
 const CASCA = `casca-${VERSAO}`;
 const DADOS = `dados-${VERSAO}`;
 
-const ARQUIVOS = ['/', '/index.html', '/app.js', '/manifest.json', '/icone-192.png'];
+const ARQUIVOS = ['/', '/index.html', '/app.js', '/base.css', '/manifest.json', '/icone-192.png'];
+
+// O console da empresa fica de fora: é aplicação de mesa, com conexão, e não
+// tem por que abrir offline. Guardar a casca dele só serviria para servir
+// versão velha a quem trabalha o dia inteiro nela.
+const FORA = (p) => p.startsWith('/empresa');
 
 self.addEventListener('install', (ev) => {
   ev.waitUntil(caches.open(CASCA).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
@@ -29,6 +34,7 @@ self.addEventListener('fetch', (ev) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (FORA(url.pathname)) return;
 
   // Dados da API: rede primeiro, e o cache é a última carta — mostrar dado
   // velho identificado como velho é melhor que tela em branco no meio do

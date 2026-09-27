@@ -10,107 +10,28 @@
 <link rel="apple-touch-icon" href="/icone-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="colheit.ai">
+<link rel="stylesheet" href="/base.css">
 <style>
-:root{
-  --fundo:#F4F7F0; --papel:#FFFFFF; --papel-2:#EDF3E9;
-  --tinta:#121A10; --tinta-2:#4B5747; --tinta-3:#7C8877;
-  --linha:#DAE3D4; --linha-forte:#BCCAB5;
-  --marca:#14692A; --marca-2:#4FA83C; --marca-suave:#E2EFDC;
-  --sol:#F5A31A; --sol-tinta:#9C6000; --sol-suave:#FCEFD8;
-  --alerta:#B23A2E;
-  --sombra:0 1px 2px rgba(18,26,16,.05), 0 8px 24px -18px rgba(18,26,16,.35);
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --fundo:#0C110B; --papel:#141A13; --papel-2:#1B231A;
-    --tinta:#E7EDE3; --tinta-2:#A2AE9C; --tinta-3:#78846F;
-    --linha:#253022; --linha-forte:#3A4735;
-    --marca:#5CBE4C; --marca-2:#78CC5E; --marca-suave:#152417;
-    --sol:#FFB63F; --sol-tinta:#FFC569; --sol-suave:#2A1E08;
-    --alerta:#F08A7C;
-    --sombra:0 1px 2px rgba(0,0,0,.45), 0 8px 24px -18px rgba(0,0,0,.9);
-  }
-}
-*,*::before,*::after{box-sizing:border-box}
-body{
-  margin:0; background:var(--fundo); color:var(--tinta);
-  font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  -webkit-font-smoothing:antialiased;
-  padding:0 0 calc(74px + env(safe-area-inset-bottom));
-}
-h1,h2{margin:0;letter-spacing:-.02em}
-p{margin:0}
-button{font:inherit;cursor:pointer}
-
+/* Só o que é do portal. Tokens e primitivas vivem em base.css. */
+body{padding:0 0 calc(74px + env(safe-area-inset-bottom))}
 #app{max-width:680px;margin:0 auto;padding:16px 14px 0}
 
 .topo{display:flex;align-items:center;gap:12px;margin:8px 0 14px}
 .topo h2{font-size:1.3rem}
-.sub{font-size:.8125rem;color:var(--tinta-3)}
 .voltar{width:38px;height:38px;flex:none;border:1px solid var(--linha);background:var(--papel);
   border-radius:11px;font-size:18px;color:var(--tinta-2)}
 
-.cartao{background:var(--papel);border:1px solid var(--linha);border-radius:14px;
-  padding:14px 16px;box-shadow:var(--sombra);margin-bottom:12px}
-.cartao.destaque{border-top:3px solid var(--sol)}
 .pedido{cursor:pointer}
 .pedido:active{transform:scale(.995)}
-
-.rotulo{font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--tinta-3);margin-bottom:8px}
-.linha{display:flex;align-items:center;gap:10px;justify-content:space-between;
-  padding:7px 0;flex-wrap:wrap}
-.linha+.linha{border-top:1px solid var(--linha)}
 .linha.hist{font-size:.875rem;color:var(--tinta-2)}
 .linha.hist.voltou span:first-child{color:var(--alerta)}
-.num{font-variant-numeric:tabular-nums;color:var(--tinta-2);white-space:nowrap}
-.num.grande{font-size:1.25rem;font-weight:600;color:var(--tinta)}
-.id{font-size:.75rem;color:var(--tinta-3);margin-right:auto}
-.obs{font-size:.8125rem;color:var(--tinta-3);padding:2px 0 6px}
 .nota-linha{font-size:.875rem;color:var(--tinta-2);margin-top:6px}
-.vazio{color:var(--tinta-3);text-align:center;padding:40px 20px}
-.etiqueta{display:inline-block;font-size:.6875rem;padding:2px 9px;border-radius:99px;
-  border:1px solid var(--marca);color:var(--marca);background:var(--marca-suave);margin:4px 0}
-
-.selo{font-size:.75rem;font-weight:600;color:var(--sol-tinta);background:var(--sol-suave);
-  border:1px solid var(--sol);border-radius:99px;padding:2px 10px;white-space:nowrap}
-.selo.feito{color:var(--marca);background:var(--marca-suave);border-color:var(--marca)}
-
-.etapas{display:flex;gap:3px;margin-top:10px;overflow-x:auto;padding-bottom:2px}
-.etapas i{flex:1;min-width:46px;font-style:normal;text-align:center;border-radius:7px;
-  padding:5px 2px;background:var(--papel-2);border:1px solid var(--linha)}
-.etapas i b{display:block;font-size:.6875rem;font-weight:600;color:var(--tinta-3)}
-.etapas i span{display:block;font-size:.5625rem;color:var(--tinta-3);line-height:1.3;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.etapas i.feito{background:var(--marca-suave);border-color:var(--marca)}
-.etapas i.feito b,.etapas i.feito span{color:var(--marca)}
-.etapas i.agora{background:var(--sol-suave);border-color:var(--sol)}
-.etapas i.agora b,.etapas i.agora span{color:var(--sol-tinta)}
-
-.progresso{margin-top:11px}
-.trilho{height:7px;border-radius:99px;background:var(--papel-2);
-  border:1px solid var(--linha);overflow:hidden}
-.trilho i{display:block;height:100%;background:var(--marca-2);border-radius:99px;
-  transition:width .4s ease}
-.passo{display:block;margin-top:7px;font-size:.8125rem;color:var(--tinta-2)}
-
-.faixa{background:var(--sol-suave);border:1px solid var(--sol);border-radius:12px;
-  padding:12px 14px;margin-bottom:12px;font-size:.9375rem;color:var(--tinta-2)}
-.faixa strong{color:var(--tinta)}
-
-.botao{width:100%;border:1px solid var(--marca);background:var(--marca);color:#fff;
-  border-radius:11px;padding:13px;font-size:1rem;font-weight:600;margin-top:12px}
-.botao:disabled{opacity:.5}
-.botao.pequeno{width:auto;padding:8px 14px;font-size:.875rem;margin-top:10px}
 
 .entrada{max-width:380px;margin:12vh auto 0;text-align:center}
 .marca{font-size:1.75rem;color:var(--marca)}
 .entrada .sub{margin:8px 0 22px;font-size:.9375rem;color:var(--tinta-2)}
 .entrada form{text-align:left}
-label.rotulo{display:block}
-input{width:100%;font:inherit;padding:13px;border:1px solid var(--linha-forte);
-  border-radius:11px;background:var(--papel);color:var(--tinta)}
-.erro{color:var(--alerta);font-size:.875rem;margin-top:10px;min-height:1.2em}
+.entrada .botao{width:100%;margin-top:12px;padding:13px;font-size:1rem}
 
 .abas{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--papel);
   border-top:1px solid var(--linha);padding-bottom:env(safe-area-inset-bottom);z-index:5}
@@ -122,7 +43,6 @@ input{width:100%;font:inherit;padding:13px;border:1px solid var(--linha-forte);
   border-bottom:1px solid var(--sol);color:var(--sol-tinta);
   font-size:.8125rem;text-align:center;padding:7px 12px}
 #sem-rede[hidden]{display:none}
-:focus-visible{outline:2px solid var(--sol);outline-offset:2px;border-radius:8px}
 </style>
 </head>
 <body>

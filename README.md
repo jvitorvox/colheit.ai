@@ -362,6 +362,25 @@ Resposta de `/auth/` nunca é guardada.
 tela pediria recarga forçada — e alguém perderia meia hora achando que o código não
 subiu.
 
+## A área da empresa
+
+O console de gestor e consultor, em `/empresa`. Mesma origem, mesmos tokens
+(`web/base.css`), layout diferente: o portal é de bolso, este é de mesa.
+
+| Aba | O que faz |
+|---|---|
+| **Painel** | pedidos em andamento, produtores, fila do campo — e o funil pelas dez etapas, que é onde o gestor vê a operação travar |
+| **Pedidos** | lista, abre, avança, retrocede com motivo, muda crédito, lança nota |
+| **Carteira** | produtores, novo cadastro e o convite de acesso |
+| **Do campo** | o que chegou pelo WhatsApp, para o consultor validar ou descartar |
+
+A regra da etapa 4 aparece aqui como ela é: o cartão da nota diz que o
+faturamento não passa sem ela, e tentar avançar devolve a mensagem da API.
+
+O service worker **deixa `/empresa` de fora**. É aplicação de mesa, com conexão —
+guardar a casca só serviria para servir versão velha a quem trabalha o dia
+inteiro nela.
+
 ## O que ainda não está aqui
 
 
@@ -369,5 +388,6 @@ subiu.
 
 
 
-Funil, visita e catálogo. A área da empresa — o portal do produtor existe, o console da revenda não. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+Funil de prospecção, registro de visita e catálogo. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

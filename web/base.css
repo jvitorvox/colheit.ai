@@ -1,0 +1,94 @@
+/* Tokens e primitivas compartilhadas pelo portal do produtor e pelo console da
+   empresa. Ficam num arquivo só para não divergirem: são duas telas de públicos
+   diferentes, mas do mesmo produto. */
+
+:root{
+  --fundo:#F4F7F0; --papel:#FFFFFF; --papel-2:#EDF3E9;
+  --tinta:#121A10; --tinta-2:#4B5747; --tinta-3:#7C8877;
+  --linha:#DAE3D4; --linha-forte:#BCCAB5;
+  --marca:#14692A; --marca-2:#4FA83C; --marca-suave:#E2EFDC;
+  --sol:#F5A31A; --sol-tinta:#9C6000; --sol-suave:#FCEFD8;
+  --alerta:#B23A2E; --alerta-suave:#F7E3E0;
+  --sombra:0 1px 2px rgba(18,26,16,.05), 0 8px 24px -18px rgba(18,26,16,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --fundo:#0C110B; --papel:#141A13; --papel-2:#1B231A;
+    --tinta:#E7EDE3; --tinta-2:#A2AE9C; --tinta-3:#78846F;
+    --linha:#253022; --linha-forte:#3A4735;
+    --marca:#5CBE4C; --marca-2:#78CC5E; --marca-suave:#152417;
+    --sol:#FFB63F; --sol-tinta:#FFC569; --sol-suave:#2A1E08;
+    --alerta:#F08A7C; --alerta-suave:#2B1512;
+    --sombra:0 1px 2px rgba(0,0,0,.45), 0 8px 24px -18px rgba(0,0,0,.9);
+  }
+}
+
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0; background:var(--fundo); color:var(--tinta);
+  font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;letter-spacing:-.02em}
+p{margin:0}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--sol);outline-offset:2px;border-radius:8px}
+
+.cartao{background:var(--papel);border:1px solid var(--linha);border-radius:14px;
+  padding:14px 16px;box-shadow:var(--sombra);margin-bottom:12px}
+.cartao.destaque{border-top:3px solid var(--sol)}
+
+.rotulo{font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tinta-3);margin-bottom:8px}
+.sub{font-size:.8125rem;color:var(--tinta-3)}
+.linha{display:flex;align-items:center;gap:10px;justify-content:space-between;
+  padding:7px 0;flex-wrap:wrap}
+.linha+.linha{border-top:1px solid var(--linha)}
+.num{font-variant-numeric:tabular-nums;color:var(--tinta-2);white-space:nowrap}
+.num.grande{font-size:1.25rem;font-weight:600;color:var(--tinta)}
+.id{font-size:.75rem;color:var(--tinta-3);margin-right:auto}
+.obs{font-size:.8125rem;color:var(--tinta-3);padding:2px 0 6px}
+.vazio{color:var(--tinta-3);text-align:center;padding:40px 20px}
+
+.selo{font-size:.75rem;font-weight:600;color:var(--sol-tinta);background:var(--sol-suave);
+  border:1px solid var(--sol);border-radius:99px;padding:2px 10px;white-space:nowrap}
+.selo.feito{color:var(--marca);background:var(--marca-suave);border-color:var(--marca)}
+.selo.ruim{color:var(--alerta);background:var(--alerta-suave);border-color:var(--alerta)}
+.etiqueta{display:inline-block;font-size:.6875rem;padding:2px 9px;border-radius:99px;
+  border:1px solid var(--linha-forte);color:var(--tinta-3);background:var(--papel-2)}
+.etiqueta.boa{border-color:var(--marca);color:var(--marca);background:var(--marca-suave)}
+
+.botao{border:1px solid var(--marca);background:var(--marca);color:#fff;
+  border-radius:11px;padding:12px 16px;font-size:.9375rem;font-weight:600}
+.botao:disabled{opacity:.5;cursor:not-allowed}
+.botao.vazado{background:transparent;color:var(--marca)}
+.botao.pequeno{padding:7px 12px;font-size:.8125rem;border-radius:9px}
+.botao.largo{width:100%;margin-top:12px;padding:13px}
+
+input,select,textarea{width:100%;font:inherit;padding:11px 12px;
+  border:1px solid var(--linha-forte);border-radius:10px;
+  background:var(--papel);color:var(--tinta)}
+label.rotulo{display:block}
+.erro{color:var(--alerta);font-size:.875rem;margin-top:10px;min-height:1.2em}
+
+.etapas{display:flex;gap:3px;margin-top:10px;overflow-x:auto;padding-bottom:2px}
+.etapas i{flex:1;min-width:46px;font-style:normal;text-align:center;border-radius:7px;
+  padding:5px 2px;background:var(--papel-2);border:1px solid var(--linha)}
+.etapas i b{display:block;font-size:.6875rem;font-weight:600;color:var(--tinta-3)}
+.etapas i span{display:block;font-size:.5625rem;color:var(--tinta-3);line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.etapas i.feito{background:var(--marca-suave);border-color:var(--marca)}
+.etapas i.feito b,.etapas i.feito span{color:var(--marca)}
+.etapas i.agora{background:var(--sol-suave);border-color:var(--sol)}
+.etapas i.agora b,.etapas i.agora span{color:var(--sol-tinta)}
+
+.progresso{margin-top:11px}
+.trilho{height:7px;border-radius:99px;background:var(--papel-2);
+  border:1px solid var(--linha);overflow:hidden}
+.trilho i{display:block;height:100%;background:var(--marca-2);border-radius:99px;
+  transition:width .4s ease}
+.passo{display:block;margin-top:7px;font-size:.8125rem;color:var(--tinta-2)}
+
+.faixa{background:var(--sol-suave);border:1px solid var(--sol);border-radius:12px;
+  padding:12px 14px;margin-bottom:12px;font-size:.9375rem;color:var(--tinta-2)}
+.faixa strong{color:var(--tinta)}
