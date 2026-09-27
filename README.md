@@ -499,6 +499,45 @@ concorrente e potencial ficam do lado de dentro, e a ausência de política é a
 forma mais difícil de desfazer por engano. Se vazar, o consultor deixa de
 registrar a verdade e a base perde o valor.
 
+## Caderno de campo — e o share por marca
+
+O último item de fosso. O share do concorrente **só pode vir do talhão**: a
+distribuidora não o entregaria, e o franqueado, sendo exclusivo, não o tem.
+Aqui ele finalmente tem de onde sair.
+
+```
+GET  /caderno/plantios              o que foi plantado (o produtor vê o dele)
+GET  /caderno/desempenho            como cada cultivar se saiu
+GET  /caderno/share                 share por marca — só empresa
+POST /caderno/plantios              registra ou corrige
+POST /caderno/plantios/:id/colheita fecha o laço
+```
+
+### A marca é obrigatória, sempre
+
+Nossa ou de terceiro. **É a coluna que responde a H5**, e ela só existe porque
+alguém esteve no talhão. Se o cultivar está no catálogo, o vínculo é feito
+sozinho — é assim que "nossa ou deles" se calcula sem ninguém classificar à mão.
+
+### Safra e safrinha convivem
+
+Um talhão tem dois plantios no mesmo ano agrícola, e a chave é
+`(talhao, safra, ciclo)`. A planilha que deu origem ao projeto era de **milho
+safrinha** — tratar as duas como uma só apagaria metade do negócio.
+
+### O share diz de que base saiu
+
+O denominador é a **área plantada que nós registramos**, não o mercado do
+território. A resposta e a tela dizem isso junto com o número: share que se
+apresenta como absoluto vira decisão errada na reunião seguinte.
+
+### Camada técnica: o produtor vê
+
+Ler segue o talhão, inclusive para ele — a lavoura é dele, e o histórico
+atravessa revenda. **Escrever exige sessão de empresa**: quem fecha o registro é
+o consultor. E o franqueado alcança o talhão pelos pedidos que carimbam o
+território dele, porque o que foi plantado é justamente o que ele está comprando.
+
 ## O que ainda não está aqui
 
 
@@ -510,5 +549,6 @@ registrar a verdade e a base perde o valor.
 
 
 
-O caderno de campo — plantio por talhão, que é o que permitiria nomear a marca concorrente. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
+
+O adaptador do Baileys — a tubulação da captura está pronta e testada, falta o processo que conversa com o WhatsApp. E o extrator de IA, que espera o plano sem-treino. O adaptador do Baileys. E o extrator de IA, que espera o plano sem-treino. `002_exemplo_isolamento.sql` fica:
 testa `app.aplicar_isolamento` de forma independente do domínio.

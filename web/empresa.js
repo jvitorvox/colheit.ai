@@ -82,6 +82,7 @@ const ABAS = [
   ['funil', 'Funil'],
   ['catalogo', 'Catálogo'],
   ['visitas', 'Visitas'],
+  ['caderno', 'Lavoura'],
   ['campo', 'Do campo'],
 ];
 
@@ -542,6 +543,7 @@ async function desenhar() {
     else if (estado.aba === 'funil') await telaFunil(main);
     else if (estado.aba === 'catalogo') await telaCatalogo(main);
     else if (estado.aba === 'visitas') await telaVisitas(main);
+    else if (estado.aba === 'caderno') await telaCaderno(main);
     else if (estado.aba === 'campo') await telaCampo(main);
     else await telaPainel(main);
   } catch (e) {
@@ -860,3 +862,135 @@ const janelaMover = (o) => janela(`Mover — ${o.produtor}`, [
   corpo: { estagio: v.estagio, motivoPerda: v.motivoPerda || null,
     concorrente: v.concorrente || null },
 }), 'Mover');
+
+/* --------------------------------------------------- caderno de campo */
+
+async function telaCaderno(main) {
+  const safra = encodeURIComponent(SAFRA_ATUAL);
+  const [share, plantios, desempenho] = await Promise.all([
+    api(`/caderno/share?safra=${safra}`),
+    api(`/caderno/plantios?safra=${safra}`),
+    api(`/caderno/desempenho?safra=${safra}`),
+  ]);
+
+  const novo = el('button', 'botao', 'Registrar plantio');
+  novo.onclick = () => janelaPlantio();
+  main.append(cabecalho('Lavoura', `caderno de campo · safra ${SAFRA_ATUAL}`, [novo]));
+
+  main.append(cartaoShare(share));
+  if (desempenho.length) main.append(cartaoDesempenho(desempenho));
+
+  if (plantios.length === 0) {
+    main.append(el('p', 'vazio', 'Nenhum plantio registrado nesta safra.'));
+    return;
+  }
+
+  main.append(tabela(
+    ['Talhão', 'Produtor', 'Ciclo', 'Cultivar', 'Marca', 'Área', 'Produtividade', ''],
+    plantios.map((p) => {
+      const colher = el('button', 'botao vazado pequeno', 'Colheita');
+      colher.onclick = (ev) => { ev.stopPropagation(); janelaColheita(p); };
+      return [
+        p.talhao, p.produtor ?? '—', p.ciclo, p.cultivar,
+        el('span', p.nossa ? 'etiqueta boa' : 'etiqueta', p.marca),
+        p.area_ha ? `${num(p.area_ha)} ha` : '—',
+        p.produtividade_sc_ha ? `${num(p.produtividade_sc_ha)} sc/ha` : '—',
+        p.produtividade_sc_ha ? '' : colher,
+      ];
+    }),
+  ));
+}
+
+/**
+ * O share por marca — o último item de fosso do desenho.
+ *
+ * A base fica escrita ao lado do número de propósito: é a área que nós
+ * registramos, não o mercado do território. Share que se apresenta como
+ * absoluto vira decisão errada na reunião seguinte.
+ */
+function cartaoShare(share) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'Share por marca — por área plantada'));
+
+  if (share.marcas.length === 0) {
+    c.append(el('p', 'sub', 'Sem plantio registrado ainda. O share aparece quando o campo registrar.'));
+    return c;
+  }
+
+  const n = el('div', 'numeros');
+  n.append(numeroCartao('Nosso share', `${share.nossoShare ?? 0}%`,
+    `de ${num(share.areaObservadaHa)} ha observados`));
+  c.append(n);
+
+  const barras = el('div', 'funil');
+  const maior = Math.max(...share.marcas.map((m) => m.areaHa), 1);
+  share.marcas.forEach((m) => {
+    const l = el('div', 'faixa-etapa');
+    const medidor = el('div', 'medidor');
+    const i = el('i');
+    i.style.width = `${(m.areaHa / maior) * 100}%`;
+    if (!m.nossa) i.style.background = 'var(--tinta-3)';
+    medidor.append(i);
+    l.append(el('span', null, m.marca + (m.nossa ? ' (nossa)' : '')), medidor,
+      el('span', 'num', `${m.share}%`));
+    barras.append(l);
+  });
+  c.append(barras);
+  c.append(el('p', 'sub', share.base));
+  return c;
+}
+
+function cartaoDesempenho(linhas) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'Como cada cultivar se saiu'));
+  c.append(tabela(
+    ['Cultivar', 'Marca', 'Talhões', 'Média', 'Pior', 'Melhor'],
+    linhas.map((l) => [
+      l.cultivar,
+      el('span', l.nossa ? 'etiqueta boa' : 'etiqueta', l.marca),
+      String(l.colhidos),
+      `${num(l.media_sc_ha)} sc/ha`, `${num(l.pior)}`, `${num(l.melhor)}`,
+    ]),
+  ));
+  return c;
+}
+
+async function janelaPlantio() {
+  const fazendas = await api('/cadastro/propriedades');
+  const talhoes = [];
+  for (const f of fazendas) {
+    const lista = await api(`/cadastro/propriedades/${f.id}/talhoes`);
+    lista.forEach((t) => talhoes.push({ ...t, fazenda: f.nome }));
+  }
+  if (talhoes.length === 0) { alerta('Cadastre um talhão antes.'); return; }
+
+  janela('Registrar plantio', [
+    { nome: 'talhao', rotulo: `Talhão (${talhoes.map((t) => t.nome).join(', ')})`,
+      valor: talhoes[0].nome },
+    { nome: 'safra', rotulo: 'Safra', valor: SAFRA_ATUAL },
+    { nome: 'ciclo', rotulo: 'Ciclo (safra ou safrinha)', valor: 'safra' },
+    { nome: 'cultivar', rotulo: 'Cultivar' },
+    { nome: 'marca', rotulo: 'Marca — nossa ou do concorrente' },
+    { nome: 'areaHa', rotulo: 'Área (ha)', tipo: 'number', obrigatorio: false },
+    { nome: 'plantadoEm', rotulo: 'Plantado em', tipo: 'date', obrigatorio: false },
+  ], async (v) => {
+    const alvo = talhoes.find((t) => t.nome.toLowerCase() === v.talhao.trim().toLowerCase());
+    if (!alvo) throw new Error('talhão não encontrado');
+    await api('/caderno/plantios', {
+      metodo: 'POST',
+      corpo: { talhaoId: alvo.id, safra: v.safra, ciclo: v.ciclo, cultivar: v.cultivar,
+        marca: v.marca, areaHa: v.areaHa ? Number(v.areaHa) : null,
+        plantadoEm: v.plantadoEm || null },
+    });
+  }, 'Registrar');
+}
+
+const janelaColheita = (p) => janela(`Colheita — ${p.talhao} · ${p.cultivar}`, [
+  { nome: 'produtividadeScHa', rotulo: 'Produtividade (sc/ha)', tipo: 'number' },
+  { nome: 'umidade', rotulo: 'Umidade (%)', tipo: 'number', obrigatorio: false },
+  { nome: 'colhidoEm', rotulo: 'Colhido em', tipo: 'date', obrigatorio: false },
+], (v) => api(`/caderno/plantios/${p.id}/colheita`, {
+  metodo: 'POST',
+  corpo: { produtividadeScHa: Number(v.produtividadeScHa),
+    umidade: v.umidade ? Number(v.umidade) : null, colhidoEm: v.colhidoEm || null },
+}), 'Registrar');

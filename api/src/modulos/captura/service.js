@@ -5,6 +5,7 @@ import * as repo from './repository.js';
 import { extrair, extratorLigado } from './extrator.js';
 import * as pedidos from '../pedidos/service.js';
 import * as visitas from '../visitas/service.js';
+import * as caderno from '../caderno/service.js';
 import { textoObrigatorio, umDe, uuidValido } from '../cadastro/validar.js';
 
 // Fala com pedidos pelo SERVICE, nunca pelo repository dele. É a regra da
@@ -152,8 +153,11 @@ export function decidir(ctx, id, acao, corpo = {}) {
   // do WhatsApp entra na mesma tabela do formulário — sem isso os dois canais
   // nunca seriam comparáveis, e a H1 revisada pede exatamente essa comparação.
   return decidido.then(async (r) => {
-    if (r.situacao !== 'validado' || r.tipo !== 'visita') return r;
-    await visitas.registrarDeRelato(ctx, r, corpo.duracaoSeg);
+    if (r.situacao !== 'validado') return r;
+    if (r.tipo === 'visita') await visitas.registrarDeRelato(ctx, r, corpo.duracaoSeg);
+    // Lavoura e lote viram plantio quando a extração trouxe cultivar e marca.
+    // Sem os dois não há o que registrar, e inventar a marca seria pior.
+    else await caderno.registrarDePlanteRelato(ctx, r);
     return r;
   });
 }
