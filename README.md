@@ -209,6 +209,9 @@ PATCH /pedidos/:id/credito          pendente · aprovado · recusado
 POST  /pedidos/:id/nota             a nota, que é o motor da captura
 POST  /pedidos/:id/nota/pago        registra o pagamento
 GET   /pedidos/avisos               fila de notificação; quem entrega é outro módulo
+GET   /pedidos/gargalo              dias parado por etapa — só empresa
+GET   /pedidos/:id/preparo          a lista do Dia Zero
+PUT   /pedidos/:id/preparo/:item    marca ou desmarca — só o produtor do pedido
 ```
 
 ### Três regras que não são burocracia
@@ -360,8 +363,46 @@ etapas, mais nota, boleto e histórico. **Minha lavoura** — a terra e os talh�
 saiu na colheita. **Visitas** — quem esteve na lavoura dele, de todas as
 revendas, com as fotos do talhão.
 
-Na etapa 6 aparece o **Dia Zero**: entre saber que a carga saiu e ela chegar, é a
-janela para acertar máquina, equipe e regulagem.
+### O Dia Zero
+
+Entre saber que a carga saiu e ela chegar existe uma janela de dias em que o
+produtor está mais ligado no aplicativo do que em qualquer outro momento do ano.
+A estratégia diz que o agricultor é o centro; esta é a hora em que isso deixa de
+ser frase. Aparece no detalhe do pedido, da etapa 6 à 8 — depois do plantio o
+preparo já virou lavoura.
+
+Três coisas, e nenhuma a mais.
+
+**Há quantos dias a carga saiu.** Não há previsão de chegada, e não se inventa
+uma: não temos transportadora nem rastreio, e um "chega quinta" fabricado é pior
+que nada — ele organiza equipe em cima disso.
+
+**A régua da semeadora.** `população × espaçamento ÷ 10.000` = sementes por
+metro. É conversão de unidade, não agronomia — a mesma conta do verso do manual.
+O que é agronomia e **não** fazemos é descontar germinação e vigor, e a tela diz
+isso em vez de entregar um número com cara de final. Os dois valores ficam no
+aparelho (`localStorage`): é ajuste de máquina, muda de talhão para talhão, e não
+é dado nosso.
+
+**A lista de preparo.** Cinco itens — descarga, equipe, semeadora, regulagem,
+tratamento. Sete seriam completos e ninguém leria no celular.
+
+> ⚠️ **A lista é dele. A revenda não lê.**
+>
+> "Ainda não tenho gente para descarregar" é problema de quem vai receber, e
+> saber disso mudaria a conversa comercial. A política dá leitura e escrita só ao
+> produtor do pedido; a revenda recebe a lista sempre zerada, e a escrita dela é
+> recusada com 404. Se um dia a revenda precisar enxergar o preparo, que seja
+> decisão tomada e **dita a ele** — não efeito colateral de onde a tabela nasceu.
+
+É a **única escrita** que a sessão do portal faz no sistema inteiro. Em todo o
+resto ela é de leitura; aqui é porque o dado é dele — ninguém além dele sabe se a
+semeadora está revisada.
+
+O texto dos itens mora no service, e o banco guarda só o **código**. Mudar a
+redação de um item não pode apagar o que a pessoa já marcou, e apagaria se a
+chave fosse a frase. Marcar de novo também não reescreve a hora: foi feito quando
+foi feito.
 
 ### O caderno é dele, e é o que faz o app valer a pena para quem planta
 

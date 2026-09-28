@@ -355,3 +355,117 @@ test('data sem hora chega como dia, não como instante em UTC', async () => {
   const visitas = await req('/visitas', { token: tProdutor });
   if (visitas.corpo.length) assert.match(visitas.corpo[0].em, /T\d{2}:\d{2}/);
 });
+
+/* ------------------------------------------------------------- Dia Zero */
+
+let pedidoId;
+
+test('a lista de preparo aparece quando a carga sai, e não antes', async () => {
+  await req('/catalogo/produtos', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'FS560', categoria: 'semente' },
+  });
+  const ped = await req('/pedidos', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      numero: 'PED-DZ-1', safra: '26/27', produtorId, propriedadeId,
+      itens: [{ cultivar: 'FS560', quantidade: 900, precoUnit: 310 }],
+    },
+  });
+  assert.equal(ped.status, 201, JSON.stringify(ped.corpo));
+  pedidoId = ped.corpo.id;
+
+  const cedo = await req(`/pedidos/${pedidoId}/preparo`, { token: tProdutor });
+  assert.equal(cedo.status, 200);
+  assert.equal(cedo.corpo.naJanela, false, 'na etapa 1 não há o que preparar');
+  assert.equal(cedo.corpo.itens.length, 5);
+  assert.ok(cedo.corpo.itens.every((i) => i.feito === false));
+
+  // Até o transporte: é aí que a janela abre. A etapa 4 não passa sem nota —
+  // é a regra do faturamento, e ela vale aqui como vale em qualquer lugar.
+  const avancar = async () => {
+    const r = await req(`/pedidos/${pedidoId}/avancar`, {
+      metodo: 'POST', token: tRevenda, corpo: {},
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  };
+  await avancar();   // 2 · pedido
+  await avancar();   // 3 · crédito
+  await req(`/pedidos/${pedidoId}/nota`, {
+    metodo: 'POST', token: tRevenda,
+    corpo: { numero: '4471', valor: 279000, emitidaEm: '2026-09-20', vencimento: '2027-03-20' },
+  });
+  await avancar();   // 4 · faturamento
+  await avancar();   // 5 · expedição
+  await avancar();   // 6 · transporte
+  const agora = await req(`/pedidos/${pedidoId}/preparo`, { token: tProdutor });
+  assert.equal(agora.corpo.etapa, 6);
+  assert.equal(agora.corpo.naJanela, true);
+});
+
+test('ele marca e desmarca o que já preparou', async () => {
+  const marcado = await req(`/pedidos/${pedidoId}/preparo/semeadora`, {
+    metodo: 'PUT', token: tProdutor, corpo: { feito: true },
+  });
+  assert.equal(marcado.status, 200);
+  const item = marcado.corpo.itens.find((i) => i.codigo === 'semeadora');
+  assert.equal(item.feito, true);
+  assert.ok(item.feitoEm, 'guarda quando foi marcado');
+
+  // Marcar de novo não reescreve a hora — foi feito quando foi feito.
+  const denovo = await req(`/pedidos/${pedidoId}/preparo/semeadora`, {
+    metodo: 'PUT', token: tProdutor, corpo: { feito: true },
+  });
+  assert.equal(denovo.corpo.itens.find((i) => i.codigo === 'semeadora').feitoEm, item.feitoEm);
+
+  const desmarcado = await req(`/pedidos/${pedidoId}/preparo/semeadora`, {
+    metodo: 'PUT', token: tProdutor, corpo: { feito: false },
+  });
+  assert.equal(desmarcado.corpo.itens.find((i) => i.codigo === 'semeadora').feito, false);
+});
+
+test('item que não existe é recusado — a lista é do service, não do cliente', async () => {
+  const r = await req(`/pedidos/${pedidoId}/preparo/comprar-trator`, {
+    metodo: 'PUT', token: tProdutor, corpo: { feito: true },
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.corpo.campo, 'item');
+});
+
+test('a lista é DELE: a revenda não lê nem escreve', async () => {
+  await req(`/pedidos/${pedidoId}/preparo/equipe`, {
+    metodo: 'PUT', token: tProdutor, corpo: { feito: true },
+  });
+
+  const daRevenda = await req(`/pedidos/${pedidoId}/preparo`, { token: tRevenda });
+  assert.equal(daRevenda.status, 200, 'o pedido é dela; o preparo é que não');
+  assert.ok(daRevenda.corpo.itens.every((i) => i.feito === false),
+    '"ainda não tenho gente para descarregar" mudaria a conversa comercial');
+
+  // Escrever, nem isso. A política barra o `with check` e o banco devolve 42501,
+  // que a API traduz em "não encontrado": do ponto de vista dela, a lista de
+  // preparo daquele pedido não existe.
+  const escrita = await req(`/pedidos/${pedidoId}/preparo/descarga`, {
+    metodo: 'PUT', token: tRevenda, corpo: { feito: true },
+  });
+  assert.equal(escrita.status, 404);
+
+  const dele = await req(`/pedidos/${pedidoId}/preparo`, { token: tProdutor });
+  assert.equal(dele.corpo.itens.find((i) => i.codigo === 'descarga').feito, false,
+    'nada da revenda entra na lista dele');
+  assert.equal(dele.corpo.itens.find((i) => i.codigo === 'equipe').feito, true);
+});
+
+test('o preparo de um pedido alheio não é dele', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Wilson Kuhn' },
+  });
+  const alheio = await req('/pedidos', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      numero: 'PED-DZ-2', safra: '26/27', produtorId: outro.corpo.id,
+      itens: [{ cultivar: 'FS560', quantidade: 100, precoUnit: 310 }],
+    },
+  });
+  const r = await req(`/pedidos/${alheio.corpo.id}/preparo`, { token: tProdutor });
+  assert.equal(r.status, 404, 'do ponto de vista dele, esse pedido não existe');
+});

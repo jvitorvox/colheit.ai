@@ -161,3 +161,20 @@ export async function safraMaisRecente(cx) {
      order by criado_em desc limit 1`);
   return rows[0]?.safra ?? null;
 }
+
+/* ----------------------------------------------------- preparo (Dia Zero) */
+
+export async function preparo(cx, pedidoId) {
+  const { rows } = await cx.query(
+    'select item, feito_em from preparo_pedido where pedido_id = $1', [pedidoId]);
+  return rows;
+}
+
+export async function marcarPreparo(cx, pedidoId, item, feito) {
+  await cx.query(`
+    insert into preparo_pedido (pedido_id, item, feito_em)
+    values ($1, $2, case when $3 then now() else null end)
+    on conflict (pedido_id, item) do update
+      set feito_em = case when $3 then coalesce(preparo_pedido.feito_em, now()) else null end`,
+  [pedidoId, item, feito]);
+}

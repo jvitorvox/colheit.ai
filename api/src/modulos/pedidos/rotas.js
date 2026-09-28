@@ -59,3 +59,18 @@ rotasPedidos.post('/:id/nota', soEmpresa, rota(async (req, res) => {
 rotasPedidos.post('/:id/nota/pago', soEmpresa, rota(async (req, res) => {
   res.json(await servico.marcarPago(req.ctx, req.params.id, req.body ?? {}));
 }));
+
+/* ----------------------------------------------------- Dia Zero (preparo) */
+
+// A lista de preparo é a única escrita que a sessão do PORTAL faz no sistema —
+// em todo o resto ela é de leitura. Aqui é porque o dado é dele: ninguém além
+// dele sabe se a semeadora está revisada. A política é que decide; a rota não
+// filtra papel nenhum.
+rotasPedidos.get('/:id/preparo', rota(async (req, res) => {
+  res.json(await servico.preparo(req.ctx, req.params.id));
+}));
+
+rotasPedidos.put('/:id/preparo/:item', rota(async (req, res) => {
+  res.json(await servico.marcarPreparo(
+    req.ctx, req.params.id, req.params.item, req.body?.feito));
+}));

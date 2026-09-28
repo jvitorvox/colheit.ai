@@ -43,6 +43,13 @@ body{padding:0 0 calc(74px + env(safe-area-inset-bottom))}
 
 /* Um plantio dentro do cartão da safra. A régua à esquerda liga as linhas do
    mesmo talhão sem precisar de mais um cartão dentro do cartão. */
+/* Item da lista de preparo: o alvo é a linha inteira, não a caixinha — no
+   celular, com a mão suja, ninguém acerta 16px. */
+.preparo-item{display:flex;align-items:flex-start;gap:11px;padding:11px 0;
+  border-top:1px solid var(--linha);font-size:.9375rem;cursor:pointer}
+.preparo-item input{width:22px;height:22px;flex:none;margin-top:1px;accent-color:var(--marca)}
+.preparo-item input:checked+span{color:var(--tinta-3);text-decoration:line-through}
+
 .plantio{border-left:2px solid var(--linha);padding-left:11px;margin:9px 0 2px}
 .plantio+.plantio{margin-top:14px}
 .linha.colhido{border-top:1px dashed var(--linha);margin-top:5px}

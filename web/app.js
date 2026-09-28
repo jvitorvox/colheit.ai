@@ -178,13 +178,9 @@ async function telaPedido(raiz, id) {
   area.append(c);
 
   // O Dia Zero: entre saber que a carga saiu e ela chegar, é a janela para
-  // acertar máquina, equipe e regulagem.
-  if (p.etapa === 6) {
-    const aviso = el('div', 'faixa');
-    aviso.append(el('strong', null, 'A carga está a caminho. '),
-      document.createTextNode('É a janela para acertar máquina, equipe e regulagem.'));
-    area.append(aviso);
-  }
+  // acertar máquina, equipe e regulagem. É quando ele mais abre o aplicativo no
+  // ano inteiro — e é a hora de o aplicativo servir para alguma coisa.
+  if (p.etapa >= 6 && p.etapa <= 8) area.append(await blocoDiaZero(p));
 
   const itens = el('article', 'cartao');
   itens.append(el('p', 'rotulo', 'O que vem'));
@@ -209,6 +205,148 @@ async function telaPedido(raiz, id) {
   });
   area.append(hist);
   raiz.replaceChildren(area);
+}
+
+/* --------------------------------------------------------------- dia zero */
+
+const REGULAGEM = 'colheitai.regulagem';
+
+/**
+ * O Dia Zero.
+ *
+ * Três coisas, e nenhuma a mais: há quantos dias a carga saiu, a régua da
+ * semeadora, e a lista de preparo.
+ *
+ * O que ele NÃO faz é prever a data de chegada. Não temos esse dado — nem
+ * transportadora, nem rastreio —, e um "chega quinta" inventado é pior que
+ * nenhum: ele organiza equipe em cima disso.
+ */
+async function blocoDiaZero(p) {
+  const bloco = el('div');
+
+  const desde = (p.historico ?? []).filter((h) => h.etapa === 6).pop();
+  const dias = desde ? Math.floor((Date.now() - new Date(desde.em)) / 86400000) : null;
+
+  const faixa = el('div', 'faixa');
+  faixa.append(el('strong', null, p.etapa === 6 ? 'A carga está a caminho. ' : 'Dia Zero. '),
+    document.createTextNode(dias === null
+      ? 'É a janela para acertar máquina, equipe e regulagem.'
+      : `Saiu ${dias === 0 ? 'hoje' : `há ${dias} dia(s)`}. `
+        + 'É a janela para acertar máquina, equipe e regulagem.'));
+  bloco.append(faixa);
+
+  bloco.append(cartaoRegulagem(p));
+  bloco.append(await cartaoPreparo(p));
+  return bloco;
+}
+
+/**
+ * A régua da semeadora: sementes por metro.
+ *
+ * `pop × espaçamento / 10.000` é conversão de unidade, não agronomia — é a
+ * mesma conta que está no verso de qualquer manual. O que é agronomia, e que
+ * NÃO fazemos, é descontar germinação e vigor: a tela diz isso em vez de
+ * entregar um número que parece final.
+ *
+ * Os dois valores ficam no aparelho dele. Não vão para o servidor: é ajuste de
+ * máquina, muda de talhão para talhão, e não é dado nosso.
+ */
+function cartaoRegulagem(p) {
+  const c = el('article', 'cartao');
+  c.append(el('p', 'rotulo', 'Régua da semeadora'));
+
+  const guardado = lerRegulagem();
+  const pop = el('input');
+  Object.assign(pop, { type: 'number', step: 'any', inputMode: 'decimal', value: guardado.pop ?? '' });
+  const esp = el('input');
+  Object.assign(esp, { type: 'number', step: 'any', inputMode: 'decimal', value: guardado.esp ?? '0.45' });
+
+  c.append(rotulo('População desejada (mil plantas/ha)'), pop, el('div', 'campo'));
+  c.append(rotulo('Espaçamento entre linhas (m)'), esp);
+
+  const saida = el('p', 'num grande');
+  const nota = el('p', 'obs');
+  const contar = () => {
+    const pl = Number(pop.value) * 1000;
+    const e = Number(esp.value);
+    if (!(pl > 0 && e > 0)) {
+      saida.textContent = '—';
+      nota.textContent = 'Preencha os dois para ver a régua.';
+      return;
+    }
+    saida.textContent = `${(pl * e / 10000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} sementes/m`;
+    nota.textContent = 'É a população desejada convertida para a linha. '
+      + 'NÃO desconta germinação nem vigor — confirme na etiqueta do saco e com seu consultor.';
+    guardarRegulagem(pop.value, esp.value);
+  };
+  pop.oninput = contar;
+  esp.oninput = contar;
+  contar();
+
+  c.append(el('div', 'campo'), saida, nota);
+
+  const cultivares = [...new Set((p.itens ?? []).map((i) => i.cultivar))].filter(Boolean);
+  if (cultivares.length) {
+    c.append(el('p', 'sub', `Vem nesta carga: ${cultivares.join(', ')}.`));
+  }
+  return c;
+}
+
+function lerRegulagem() {
+  try { return JSON.parse(localStorage.getItem(REGULAGEM)) ?? {}; } catch { return {}; }
+}
+function guardarRegulagem(pop, esp) {
+  try { localStorage.setItem(REGULAGEM, JSON.stringify({ pop, esp })); } catch { /* sem espaço */ }
+}
+
+/**
+ * A lista de preparo. É a única coisa que a sessão do portal ESCREVE.
+ *
+ * E é dele: a revenda não lê. "Ainda não tenho gente para descarregar" é
+ * problema de quem vai receber, e mudaria a conversa comercial se vazasse.
+ */
+async function cartaoPreparo(p) {
+  const c = el('article', 'cartao');
+  c.append(el('p', 'rotulo', 'Preparo'));
+
+  let lista;
+  try {
+    lista = await api(`/pedidos/${p.id}/preparo`);
+  } catch {
+    // Sem sinal na fazenda é o normal. A lista aparece quando voltar.
+    c.append(el('p', 'obs', 'Não consegui trazer a lista agora.'));
+    return c;
+  }
+
+  const feitos = () => lista.itens.filter((i) => i.feito).length;
+  const conta = el('span', 'num');
+  const topo = el('div', 'linha');
+  topo.append(el('span', null, 'Só você vê esta lista'), conta);
+  c.append(topo);
+
+  lista.itens.forEach((i) => {
+    const l = el('label', 'preparo-item');
+    const caixa = el('input');
+    caixa.type = 'checkbox';
+    caixa.checked = i.feito;
+    caixa.onchange = async () => {
+      caixa.disabled = true;
+      try {
+        lista = await api(`/pedidos/${p.id}/preparo/${i.codigo}`, {
+          metodo: 'PUT', corpo: { feito: caixa.checked },
+        });
+        conta.textContent = `${feitos()} de ${lista.itens.length}`;
+      } catch {
+        caixa.checked = !caixa.checked;   // não fingir que gravou
+      }
+      caixa.disabled = false;
+    };
+    l.append(caixa, el('span', null, i.texto));
+    c.append(l);
+  });
+
+  conta.textContent = `${feitos()} de ${lista.itens.length}`;
+  return c;
 }
 
 function cartaoNota(n) {

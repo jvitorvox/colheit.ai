@@ -291,3 +291,66 @@ export function gargalo(ctx) {
 }
 
 export const safraCorrente = (ctx) => comContexto(ctx, (cx) => repo.safraMaisRecente(cx));
+
+/* ----------------------------------------------------- Dia Zero (preparo) */
+
+/**
+ * A lista de preparo do Dia Zero.
+ *
+ * O texto mora aqui, e não na tela nem no banco. No banco a chave é o código —
+ * mudar a redação de um item não pode apagar o que a pessoa já marcou. E na
+ * tela seria regra de negócio virando decoração, que é o erro que a seção 13
+ * proíbe.
+ *
+ * Sete itens seriam completos e ninguém leria no celular. Estes cinco são os
+ * que fazem a carga descer do caminhão e a semeadora andar no mesmo dia.
+ */
+export const ITENS_DE_PREPARO = [
+  { codigo: 'descarga', texto: 'Local de descarga definido, com acesso para o caminhão' },
+  { codigo: 'equipe', texto: 'Gente combinada para descarregar no dia' },
+  { codigo: 'semeadora', texto: 'Semeadora revisada — discos, dosador, rolamentos' },
+  { codigo: 'regulagem', texto: 'Regulagem conferida para a cultivar que vem' },
+  { codigo: 'tratamento', texto: 'Tratamento de semente definido com o consultor' },
+];
+
+const CODIGOS = new Set(ITENS_DE_PREPARO.map((i) => i.codigo));
+
+/**
+ * Monta a resposta DENTRO da transação de quem chamou.
+ *
+ * Existe separada porque quem marca precisa devolver a lista já com a marca. Um
+ * `comContexto` aninhado abriria outra conexão do pool, que não enxerga o que a
+ * primeira ainda não confirmou — e a resposta voltaria dizendo que nada mudou.
+ */
+async function montarPreparo(cx, pedidoId) {
+  const p = await repo.buscar(cx, pedidoId);
+  if (!p) throw new NaoEncontrado('pedido');
+  const feitos = new Map((await repo.preparo(cx, pedidoId)).map((r) => [r.item, r.feito_em]));
+  return {
+    pedidoId,
+    etapa: p.etapa,
+    // A janela é entre a carga sair e o plantio. Antes disso não há o que
+    // preparar, e depois o preparo já virou lavoura.
+    naJanela: p.etapa >= 6 && p.etapa <= 8,
+    itens: ITENS_DE_PREPARO.map((i) => ({
+      ...i, feito: Boolean(feitos.get(i.codigo)), feitoEm: feitos.get(i.codigo) ?? null,
+    })),
+  };
+}
+
+export function preparo(ctx, pedidoId) {
+  uuidValido(pedidoId, 'id');
+  return comContexto(ctx, (cx) => montarPreparo(cx, pedidoId));
+}
+
+export function marcarPreparo(ctx, pedidoId, item, feito) {
+  uuidValido(pedidoId, 'id');
+  if (!CODIGOS.has(item)) throw new ErroDeUso('item de preparo desconhecido', 'item');
+  return comContexto(ctx, async (cx) => {
+    // A política já barra o pedido de outro; isto é para a mensagem ser clara
+    // em vez de um 404 de "não existe".
+    if (!(await repo.buscar(cx, pedidoId))) throw new NaoEncontrado('pedido');
+    await repo.marcarPreparo(cx, pedidoId, item, Boolean(feito));
+    return montarPreparo(cx, pedidoId);
+  });
+}
