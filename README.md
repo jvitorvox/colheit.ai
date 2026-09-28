@@ -934,8 +934,8 @@ painel escolhe o que cabe na abertura e leva as frases junto.
 > de ensaio.
 
 Sem talhão plantado o cartão não aparece, em vez de mostrar `0 sc/ha` — número
-
 que parece resultado ruim quando é ausência de registro.
+
 ### O mesmo painel serve ao franqueado
 
 Ele não tem carteira, não tem fila de visita e não tem funil: enxerga a cadeia
