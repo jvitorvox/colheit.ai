@@ -54,7 +54,12 @@ tbody tr.clicavel:hover{background:var(--papel-2)}
   align-items:center;font-size:.875rem}
 .funil .medidor{height:22px;background:var(--papel-2);border:1px solid var(--linha);
   border-radius:6px;overflow:hidden}
+.funil .medidor{position:relative}
 .funil .medidor i{display:block;height:100%;background:var(--marca-2)}
+/* A régua da região: uma marca vertical no medidor, não uma segunda barra —
+   duas barras por linha em oito municípios viram gráfico que ninguém lê. */
+.funil .medidor b{position:absolute;top:-2px;bottom:-2px;width:2px;
+  background:var(--tinta);opacity:.55}
 /* Etapa acima do corte de dias parado: quem olha de longe tem de ver. */
 .funil .medidor i.alerta{background:var(--sol)}
 /* Tela estreita: o rótulo da etapa não cabe ao lado do medidor — em 375px ele

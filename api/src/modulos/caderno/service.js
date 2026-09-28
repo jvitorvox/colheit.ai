@@ -349,3 +349,57 @@ export function benchmarkDoProdutor(ctx, safra, produtorId) {
 // Espelha app.benchmark_minimo(). Só para a mensagem poder dizer quantos
 // faltam; quem decide continua sendo o banco.
 const MINIMO_BENCHMARK = 5;
+
+/**
+ * A carteira dela contra a região, município a município.
+ *
+ * ⚠️ Aqui a região INCLUI a carteira dela, e isso é decisão, não descuido.
+ *
+ * O produtor é excluído da própria comparação porque ele não escolhe quem mais
+ * está no grupo. A revenda escolhe: a carteira é dela. Se a região fosse
+ * "todos menos a minha carteira", mover um produtor para dentro da carteira
+ * mudaria o número da região, e a diferença entre as duas consultas revelaria a
+ * lavoura daquele produtor. Um piso de anonimato não protege contra quem
+ * controla o recorte — por isso não há recorte a controlar.
+ *
+ * Fica calada onde a carteira dela é praticamente o município inteiro: a
+ * diferença seria zero contra si mesma, e zero não diz nada.
+ */
+export function benchmarkPorMunicipio(ctx, safra) {
+  return comContexto(ctx, async (cx) => {
+    const escolhida = safra
+      ? textoObrigatorio(safra, 'safra', 10)
+      : (await repo.mediaPorSafra(cx))[0]?.safra;
+    if (!escolhida) return [];
+
+    const meus = (await repo.safraPorMunicipio(cx, escolhida))
+      .filter((m) => m.media_ponderada_sc_ha !== null)
+      .slice(0, MAXIMO_MUNICIPIOS);
+
+    const linhas = await Promise.all(meus.map(async (m) => {
+      const b = await repo.benchmarkRegional(cx, escolhida, m.municipio, m.uf, null);
+      const minha = Number(m.media_ponderada_sc_ha);
+      const regiao = b ? Number(b.media_ponderada_sc_ha) : null;
+      const vazio = b && b.produtores <= m.produtores;
+      return {
+        municipio: m.municipio,
+        uf: m.uf,
+        minhaMediaScHa: minha,
+        produtoresMeus: m.produtores,
+        regiao: !b || vazio ? null : {
+          nivel: b.nivel,
+          produtores: b.produtores,
+          mediaPonderadaScHa: regiao,
+          variacaoPct: Number(((minha / regiao - 1) * 100).toFixed(1)),
+        },
+      };
+    }));
+
+    return linhas;
+  });
+}
+
+// Uma revenda opera numa punhado de municípios; uma distribuidora, em mais. O
+// teto existe porque cada linha é uma ida ao banco, e a tela de abertura não é
+// relatório.
+const MAXIMO_MUNICIPIOS = 8;

@@ -68,7 +68,7 @@ export async function montar(ctx, { safra } = {}) {
       caderno.resultadoDaSafra(ctx, escolhida),
       caderno.resultadoPorOrigem(ctx, escolhida),
       caderno.safraPorFranqueado(ctx, escolhida),
-      caderno.safraPorMunicipio(ctx, escolhida),
+      caderno.benchmarkPorMunicipio(ctx, escolhida),
     ]);
 
   // Bloco vazio vira AUSÊNCIA, não uma fileira de zeros.
@@ -97,9 +97,12 @@ export async function montar(ctx, { safra } = {}) {
     resultado: resumirResultado(resultado, porOrigem),
     // A rede só diz algo a quem enxerga mais de um franqueado: a franqueadora.
     rede: porFranqueado.length > 1 ? porFranqueado : null,
-    // Quem vende em mais de um município compara regiões; com uma só, não há
-    // comparação a fazer. É o recorte da distribuidora, que não tem rede.
-    territorios: porMunicipio.length > 1 ? porMunicipio : null,
+    // Município a município, com a região ao lado quando ela existe. Aparece
+    // com mais de um município — e também com um só, se houver região a
+    // comparar: aí já não é ranking interno, é a carteira contra a vizinhança.
+    territorios: porMunicipio.length > 1 || porMunicipio.some((m) => m.regiao)
+      ? porMunicipio
+      : null,
   };
 }
 

@@ -337,38 +337,54 @@ function cartaoRede(rede) {
  */
 function cartaoTerritorios(lista) {
   const c = el('div', 'cartao');
-  c.append(el('p', 'rotulo', 'A safra por município'));
+  const temRegiao = lista.some((m) => m.regiao);
+  c.append(el('p', 'rotulo',
+    temRegiao ? 'A carteira contra a região' : 'A safra por município'));
 
-  const comNumero = lista.filter((m) => m.mediaPonderadaScHa !== null);
-  const maior = Math.max(1, ...comNumero.map((m) => m.mediaPonderadaScHa));
+  const maior = Math.max(1, ...lista.map((m) => Math.max(
+    m.minhaMediaScHa, m.regiao?.mediaPonderadaScHa ?? 0)));
 
-  // Dez municípios já é lista de relatório; a tela de abertura mostra os
-  // extremos, que é onde há decisão a tomar.
-  const mostrar = lista.length > 8 ? [...lista.slice(0, 4), ...lista.slice(-4)] : lista;
-
-  mostrar.forEach((m) => {
+  lista.forEach((m) => {
     const l = el('div', 'faixa-etapa');
     const medidor = el('div', 'medidor');
-    if (m.mediaPonderadaScHa !== null) {
-      const barra = el('i');
-      barra.style.width = `${(m.mediaPonderadaScHa / maior) * 100}%`;
-      medidor.append(barra);
+    const barra = el('i');
+    barra.style.width = `${(m.minhaMediaScHa / maior) * 100}%`;
+    medidor.append(barra);
+    // A régua da região é uma marca no medidor, não uma segunda barra: duas
+    // barras por linha em oito municípios viram um gráfico que ninguém lê.
+    if (m.regiao) {
+      const marca = el('b');
+      marca.style.left = `${(m.regiao.mediaPonderadaScHa / maior) * 100}%`;
+      marca.title = `região: ${num(m.regiao.mediaPonderadaScHa)} sc/ha`;
+      medidor.append(marca);
     }
+    // Quando o município não alcançou o piso, a comparação subiu para o estado
+    // — e a linha tem de dizer, senão "+2,4%" em Lucas do Rio Verde é lido como
+    // se fosse contra Lucas do Rio Verde.
     l.append(el('span', null, `${m.municipio}/${m.uf}`), medidor,
-      el('span', 'num', m.mediaPonderadaScHa === null
-        ? 'sem colheita'
-        : `${num(m.mediaPonderadaScHa)} sc/ha`));
-    l.title = `${num(m.areaColhidaHa)} ha colhidos · ${m.colhidos} de ${m.talhoes} talhões`;
+      el('span', 'num', m.regiao
+        ? `${m.regiao.variacaoPct > 0 ? '+' : ''}${num(m.regiao.variacaoPct)}%`
+          + (m.regiao.nivel === 'estado' ? ` vs ${m.uf}` : '')
+        : `${num(m.minhaMediaScHa)} sc/ha`));
+    l.title = `sua carteira: ${num(m.minhaMediaScHa)} sc/ha`
+      + (m.regiao ? ` · região: ${num(m.regiao.mediaPonderadaScHa)} sc/ha `
+        + `(${m.regiao.produtores} produtores)` : '');
     c.append(l);
   });
 
-  if (mostrar.length < lista.length) {
+  if (temRegiao) {
+    // A frase é a mesma disciplina do resto: o número mistura solo, clima e
+    // manejo, e a região aqui INCLUI a carteira dela — sem dizer isso, a
+    // comparação parece ser contra o concorrente, e não contra o conjunto.
     c.append(el('p', 'detalhe',
-      `Os quatro melhores e os quatro piores de ${lista.length} municípios.`));
+      'A região inclui a sua carteira, e só aparece com pelo menos cinco '
+      + 'produtores. Solo, clima e manejo mudam de um município para o outro — '
+      + 'a diferença não é só de quem plantou.'));
+  } else {
+    c.append(el('p', 'detalhe',
+      'Solo, clima e manejo mudam de um município para o outro — a diferença '
+      + 'não é só de quem plantou.'));
   }
-  c.append(el('p', 'detalhe',
-    'Solo, clima e manejo mudam de um município para o outro — a diferença não '
-    + 'é só de quem plantou.'));
   return c;
 }
 

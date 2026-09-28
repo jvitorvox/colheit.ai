@@ -292,6 +292,10 @@ export async function safraPorMunicipio(cx, safra) {
   const { rows } = await cx.query(`
     select pr.municipio, pr.uf,
            count(distinct pl.id)::int                             as talhoes,
+           -- Quantos produtores DELA há no município. Serve para calar a
+           -- comparação com a região quando a carteira dela É a região: a
+           -- diferença seria zero, e zero não diz nada.
+           count(distinct pp.produtor_id)::int                    as produtores,
            count(c.produtividade_sc_ha)::int                      as colhidos,
            coalesce(sum(coalesce(pl.area_ha, t.area_ha))
                     filter (where c.produtividade_sc_ha is not null), 0) as area_colhida_ha,
@@ -305,6 +309,8 @@ export async function safraPorMunicipio(cx, safra) {
       from plantio pl
       join talhao t on t.id = pl.talhao_id
       join propriedade pr on pr.id = t.propriedade_id
+      left join produtor_propriedade pp
+             on pp.propriedade_id = pr.id and pp.fim is null
       left join colheita c on c.plantio_id = pl.id
      where pl.safra = $1 and pr.municipio is not null
      group by pr.municipio, pr.uf

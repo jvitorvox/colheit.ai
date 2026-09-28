@@ -175,3 +175,69 @@ test('sem safra pedida, vale a mais recente registrada', async () => {
   assert.ok(r.corpo, 'sem ?safra= também responde');
   assert.equal(r.corpo.produtores, 5);
 });
+
+/* ------------------------------------------- a carteira contra a região */
+
+test('a região da revenda INCLUI a carteira dela, e isso é decisão', async () => {
+  // O produtor é excluído da própria comparação porque não escolhe quem mais
+  // está no grupo. A revenda escolhe: se a região fosse "todos menos a minha
+  // carteira", mover um produtor para dentro dela mudaria o número da região, e
+  // a diferença entre duas consultas revelaria a lavoura daquele produtor.
+  const r = await req(`/caderno/benchmark-por-municipio?safra=${SAFRA}`, { token: tRevenda });
+  assert.equal(r.status, 200);
+  const sorriso = r.corpo.find((m) => m.municipio === 'Sorriso');
+  assert.ok(sorriso);
+
+  // Todos os produtores de Sorriso são da carteira desta revenda, então a
+  // comparação é contra si mesma e fica calada.
+  assert.equal(sorriso.regiao, null,
+    'carteira que é o município inteiro não se compara com ela mesma');
+  assert.ok(sorriso.minhaMediaScHa > 0);
+});
+
+test('com gente de fora da carteira, a comparação aparece', async () => {
+  const outra = await criarTenant('Agro Sul', '22222222000122', 'distribuidor');
+  await criarUsuario(outra, 'Gestor Sul', 'gestor@sul.com', 'gestor');
+  const tOutra = await entrar(req, 'gestor@sul.com');
+  await req('/catalogo/produtos', {
+    metodo: 'POST', token: tOutra, corpo: { nome: 'NS7709', categoria: 'semente' },
+  });
+
+  // Seis produtores da concorrente no mesmo município.
+  const antes = tRevenda;
+  tRevenda = tOutra;
+  for (let i = 1; i <= 6; i++) await fazendeiro(`Da Concorrente ${i}`, 50 + i);
+  tRevenda = antes;
+
+  const r = await req(`/caderno/benchmark-por-municipio?safra=${SAFRA}`, { token: tRevenda });
+  const sorriso = r.corpo.find((m) => m.municipio === 'Sorriso');
+  assert.ok(sorriso.regiao, 'agora há gente além da carteira dela');
+  assert.ok(sorriso.regiao.produtores > sorriso.produtoresMeus);
+  assert.equal(typeof sorriso.regiao.variacaoPct, 'number');
+});
+
+test('o piso vale igual por este caminho', async () => {
+  // Um município com poucos produtores não ganha comparação, venha a pergunta
+  // do produtor ou da revenda.
+  const r = await req(`/caderno/benchmark-por-municipio?safra=${SAFRA}`, { token: tRevenda });
+  const sinop = r.corpo.find((m) => m.municipio === 'Sinop');
+  if (sinop) {
+    assert.ok(!sinop.regiao || sinop.regiao.produtores >= 5,
+      'nunca um número de menos de cinco produtores');
+  }
+});
+
+test('a rota é da empresa — o produtor tem a dele, com outra exclusão', async () => {
+  const b = quem('Produtor B');
+  const tel = '5566999330022';
+  const cod = await req('/auth/produtor/codigo', { metodo: 'POST', corpo: { telefone: tel } });
+  const ent = await req('/auth/produtor/entrar', {
+    metodo: 'POST', corpo: { telefone: tel, codigo: cod.corpo.codigo },
+  });
+  assert.ok(ent.corpo.token, JSON.stringify(ent.corpo));
+  const r = await req(`/caderno/benchmark-por-municipio?safra=${SAFRA}`,
+    { token: ent.corpo.token });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+  assert.ok(b);
+});

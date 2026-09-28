@@ -68,3 +68,9 @@ rotasCaderno.get('/benchmark', rota(async (req, res) => {
   if (!produtorId) throw new ErroDeUso('produtorId é obrigatório', 'produtorId');
   res.json(await servico.benchmarkDoProdutor(req.ctx, req.query.safra, produtorId));
 }));
+
+// A carteira contra a região, município a município. Só empresa: o produtor
+// tem o benchmark dele em /caderno/benchmark, com outra regra de exclusão.
+rotasCaderno.get('/benchmark-por-municipio', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.benchmarkPorMunicipio(req.ctx, req.query.safra));
+}));

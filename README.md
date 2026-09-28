@@ -1135,20 +1135,36 @@ mesma cadastrou — é dado dela. A confidencialidade da cadeia não é ferida p
 agrupamento de vendas próprias.
 
 ```
-A SAFRA POR MUNICÍPIO
-Rio Verde/GO           ████████████████  71,4 sc/ha
-Jataí/GO               ███████████████   68,9 sc/ha
-Sorriso/MT             ██████████████    63,9 sc/ha
-Lucas do Rio Verde/MT  █████████████     58,2 sc/ha
-Solo, clima e manejo mudam de um município para o outro — a
-diferença não é só de quem plantou.
+A CARTEIRA CONTRA A REGIÃO
+Sorriso/MT             ██████████████▕  +9,6%
+Lucas do Rio Verde/MT  ████████████▕     +2,4% vs MT
+Sinop/MT               ██████▕          -12,9%
+A região inclui a sua carteira, e só aparece com pelo menos cinco
+produtores. Solo, clima e manejo mudam de um município para o
+outro — a diferença não é só de quem plantou.
 ```
 
-Acima de oito municípios mostra os quatro melhores e os quatro piores: no meio
-da distribuição não há decisão a tomar, e a tela de abertura não é relatório.
+A barra é a carteira dela; o traço é a região. Duas barras por linha em oito
+municípios viram um gráfico que ninguém lê.
 
+`vs MT` na terceira linha não é detalhe: aquele município não alcançou o piso, a
+comparação subiu para o estado, e sem dizer isso "+2,4% em Lucas do Rio Verde"
+seria lido como se fosse contra Lucas do Rio Verde.
 
+> **A região aqui INCLUI a carteira dela, e isso é decisão.**
+>
+> O produtor é excluído da própria comparação porque ele **não escolhe** quem
+> mais está no grupo. A revenda escolhe: a carteira é dela. Se a região fosse
+> "todos menos a minha carteira", mover um produtor para dentro da carteira
+> mudaria o número da região, e a diferença entre as duas consultas revelaria a
+> lavoura daquele produtor. **Um piso de anonimato não protege contra quem
+> controla o recorte** — por isso não há recorte a controlar.
 
+E fica calada onde a carteira dela é praticamente o município inteiro: a
+diferença seria contra si mesma, e zero não diz nada.
+
+Acima de oito municípios a tela para: cada linha é uma ida ao banco, e a tela de
+abertura não é relatório.
 
 ## Caderno de campo — e o share por marca
 
@@ -1164,7 +1180,8 @@ GET  /caderno/resultado             o fechamento da safra, ponderado pela área
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/resultado-por-franqueado  a safra de cada franqueado da rede
 GET  /caderno/resultado-por-municipio   a safra por região, sem nomear franqueado
-GET  /caderno/benchmark             a região, anônima e com piso de cinco
+GET  /caderno/benchmark             a região do produtor, com ele de FORA
+GET  /caderno/benchmark-por-municipio  a carteira contra a região, ela INCLUÍDA
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige
 POST /caderno/plantios/:id/colheita fecha o laço
