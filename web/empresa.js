@@ -412,9 +412,22 @@ async function telaCampo(main) {
 
     if (r.transcricao) c.append(el('p', 'obs', r.transcricao));
     if (r.extraido) {
-      const ex = el('p', 'sub');
-      ex.textContent = Object.entries(r.extraido).map(([k, v]) => `${k}: ${v}`).join(' · ');
-      c.append(ex);
+      // A confiança sai da lista e vira etiqueta: é sobre o quanto conferir, e
+      // no meio de "cultivar · marca · lote" ela passaria batida. Abaixo de
+      // 60% o consultor tem de reler o relato antes de validar, e a tela diz
+      // isso em vez de deixar o número por conta dele.
+      const { confianca, ...campos } = r.extraido;
+      if (confianca !== undefined) {
+        const pct = Math.round(Number(confianca) * 100);
+        topo.append(el('span', pct >= 60 ? 'etiqueta' : 'etiqueta atencao',
+          `leitura ${pct}%${pct >= 60 ? '' : ' · confira'}`));
+      }
+      const pares = Object.entries(campos);
+      if (pares.length) {
+        const ex = el('p', 'sub');
+        ex.textContent = pares.map(([k, v]) => `${k}: ${v}`).join(' · ');
+        c.append(ex);
+      }
     }
 
     const acoes = el('div', 'linha');

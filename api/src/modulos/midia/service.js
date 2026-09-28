@@ -65,3 +65,18 @@ export function baixar(ctx, id) {
 }
 
 export const listar = (ctx) => comContexto(ctx, (cx) => repo.listarDoTenant(cx));
+
+/**
+ * Lê passando POR CIMA da política, para o extrator.
+ *
+ * É o mesmo caso do gateway e do despachante de push: job não tem sessão, e a
+ * fila atravessa tenants — ela é da plataforma. Não há rota que chegue aqui, e
+ * é de propósito: o que passa por cima da política não pode ser alcançável por
+ * uma requisição.
+ */
+export async function lerComoDono(id) {
+  const m = await repo.buscar(dono, id);
+  if (!m) return null;
+  const arm = await armazem();
+  return { ...m, bytes: await arm.buscar(m.chave) };
+}

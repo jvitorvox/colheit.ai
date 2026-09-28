@@ -14,6 +14,7 @@ import { rotasCatalogo } from './modulos/catalogo/rotas.js';
 import { rotasFunil } from './modulos/funil/rotas.js';
 import { rotasCaderno } from './modulos/caderno/rotas.js';
 import { rotasMidia } from './modulos/midia/rotas.js';
+import { ligarSeAutorizado } from './modulos/captura/extrator.js';
 
 const RAIZ_WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 
@@ -67,5 +68,14 @@ export function criarApp() {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const porta = Number(process.env.API_PORT ?? 3000);
+
+  // A leitura automática se liga na subida do processo, não dentro de
+  // `criarApp()`: assim o teste sobe a API sem nunca herdar um extrator de
+  // verdade do ambiente, e o que vale aparece no log de quem subiu.
+  const ia = ligarSeAutorizado();
+  console.log(ia.ligado
+    ? `extrator LIGADO (${ia.modelo}) — plano sem-treino declarado`
+    : `extrator desligado (${ia.motivo}) — a fila fica guardada`);
+
   criarApp().listen(porta, () => console.log(`api em :${porta}`));
 }

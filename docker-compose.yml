@@ -74,6 +74,11 @@ services:
       S3_CHAVE: ${S3_CHAVE}
       S3_SEGREDO: ${S3_SEGREDO}
       MIDIA_DIR: /dados/midia
+      # Sem as DUAS, a leitura automática não liga. Ver .env.example.
+      IA_CHAVE: ${IA_CHAVE}
+      IA_PLANO: ${IA_PLANO}
+      IA_MODELO: ${IA_MODELO}
+      IA_TIMEOUT_MS: ${IA_TIMEOUT_MS}
     ports:
       - "${API_PORT}:3000"
     volumes:

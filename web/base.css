@@ -62,6 +62,8 @@ button{font:inherit;cursor:pointer}
 .etiqueta{display:inline-block;font-size:.6875rem;padding:2px 9px;border-radius:99px;
   border:1px solid var(--linha-forte);color:var(--tinta-3);background:var(--papel-2)}
 .etiqueta.boa{border-color:var(--marca);color:var(--marca);background:var(--marca-suave)}
+/* Leitura automática de baixa confiança: pede releitura, não é erro. */
+.etiqueta.atencao{border-color:var(--sol);color:var(--sol-tinta);background:var(--sol-suave)}
 
 .botao{border:1px solid var(--marca);background:var(--marca);color:#fff;
   border-radius:11px;padding:12px 16px;font-size:.9375rem;font-weight:600}

@@ -298,17 +298,19 @@ inserir promoção direto no banco e falha.
 Um número por tenant, como no Construtivo: se um cair, o canal para de um
 cliente, não da plataforma.
 
-### ⚠️ A extração está desligada, e é decisão
+### ⚠️ A extração nasce desligada, e é decisão
 
 Áudio de produtor descrevendo a própria lavoura é o dado mais sensível que o
-projeto captura, e o **plano sem-treino do provedor de IA segue pendente** desde
-o copiloto do CRM. Enquanto não estiver fechado, `extrator.js` devolve `null` e o
-relato fica em `aguardando_extracao` — o estado honesto: chegou, está guardado,
-ninguém leu.
+projeto captura, e o **plano sem-treino do provedor segue pendente** desde o
+copiloto do CRM. O extrator existe e está pronto — mas nasce desligado, e o
+relato fica em `aguardando_extracao`: o estado honesto de chegou, está
+guardado, ninguém leu.
 
-**A espera é reversível.** `extrairPendentes()` passa o extrator na fila represada,
-então nada do que chegou antes se perde: no dia em que o plano for fechado, a base
-de campo acumulada entra de uma vez. Existe teste para isso.
+**A espera é reversível.** `npm run ler` passa o extrator na fila represada,
+então nada do que chegou antes se perde: no dia em que o plano for fechado, a
+base de campo acumulada entra de uma vez. Existe teste para isso.
+
+Detalhes da leitura automática em [Extrator de IA](#extrator-de-ia).
 
 ### O gateway fica fora
 
@@ -625,10 +627,98 @@ Se a subida falhar, a **mensagem vai mesmo assim**. O produtor mandou e vai
 cobrar; o consultor ao menos vê que chegou algo dele, o que é melhor do que o
 silêncio de uma mensagem descartada.
 
+## Extrator de IA
+
+Transcreve o áudio do campo e estrutura o relato. É o que transforma "o
+produtor mandou um áudio" em cultivar, marca, lote e estande dentro do caderno
+de campo — e é também a peça que mexe com o dado mais sensível do projeto.
+
+### A trava é dupla, e a segunda não é técnica
+
+```bash
+IA_CHAVE=...            # a chave do provedor
+IA_PLANO=sem-treino     # a declaração de que o contrato proíbe treinar no que sobe
+```
+
+Faltando qualquer uma, **fica desligado**. `IA_PLANO` não tem efeito nenhum no
+código, e é exatamente por isso que existe: quem liga a leitura automática
+precisa afirmar por escrito, num arquivo que alguém revisa, que o plano do
+provedor proíbe treino. O caso que importa não é a chave ausente — é a chave
+presente com o contrato esquecido, e esse sai no log da subida:
+
+```
+extrator DESLIGADO: há IA_CHAVE, mas IA_PLANO não declara `sem-treino`.
+Áudio de produtor não sobe para provedor que pode treinar nele.
+```
+
+### O que sobe, e o que não sobe
+
+Sobe o áudio (ou a foto, e a legenda dela — é onde costuma vir o número do
+lote) mais um glossário de safra, talhão, estande e estádio fenológico.
+
+**Não sobe** nome, telefone, propriedade nem tenant. O provedor não precisa
+saber de quem é a voz para transcrever o que ela diz, e o que ele não recebe não
+vaza. Existe teste que falha se algum desses campos aparecer no que é enviado.
+
+### A saída é esquematizada, não lida de prosa
+
+`responseSchema` do próprio provedor, `temperature: 0`. Campo de negócio
+extraído de texto livre por expressão regular é a receita de número errado com
+cara de número certo; e variação de temperatura produziria campo diferente para
+o mesmo áudio, que ninguém consegue conferir duas vezes.
+
+Os nomes do esquema **são o contrato** com os outros módulos: `cultivar`,
+`marca`, `lote`, `safra`, `ciclo`, `areaHa` e `populacao` são lidos por
+`caderno.registrarDePlanteRelato`; `estagio` e `estande`, por
+`visitas.registrarDeRelato`. Renomear um deles quebraria o laço em silêncio —
+por isso há teste amarrando os dois lados.
+
+### A regra número um é não inventar
+
+Campo que não foi dito fica `null`, e `null` é descartado antes de guardar. O
+consultor confere o que a IA escreveu: **um campo plausível e errado passa; um
+campo vazio ele preenche.** Deduzir a marca pelo prefixo da cultivar, ou
+adivinhar qual talhão cadastrado é a "Gleba 4" falada, são exatamente os erros
+que o prompt proíbe — quem aponta o talhão é o consultor, ao validar.
+
+A leitura vem com `confianca` de 0 a 1, e a tela "Do campo" a mostra como
+etiqueta. Abaixo de 60% ela fica âmbar e diz `confira`.
+
+### Quando dá errado, o relato não se perde
+
+| Situação | O que acontece |
+|---|---|
+| 429 ou 5xx | tenta mais uma vez, com pausa |
+| 403 ou 400 (chave, cota, esquema) | **não** repete — só gastaria; sai no log |
+| tempo esgotado (`IA_TIMEOUT_MS`, 20s) | devolve `null` |
+| resposta vazia, bloqueada ou que não é JSON | devolve `null`, com o motivo no log |
+
+`null` nunca é erro: o relato continua em `aguardando_extracao` e entra na
+próxima volta do leitor. Falha aqui jamais derruba a mensagem que o produtor
+mandou.
+
+### Drenar a fila
+
+```bash
+docker compose exec -w /app/api api npm run ler
+```
+
+Roda com o papel dono e não é rota — a fila atravessa tenants, é da
+plataforma, mesmo motivo do despachante de push. O limite (`IA_LIMITE`, 100) é
+proposital: cada item é uma chamada paga, e uma fila de meses lida de uma vez
+sem teto é uma conta que ninguém autorizou. Rodar de novo continua de onde
+parou.
+
 ## O que ainda não está aqui
 
-O extrator de IA, que espera o plano sem-treino do provedor — a fila fica
-guardada em `aguardando_extracao` e entra de uma vez quando ele entrar.
+**O plano sem-treino do provedor.** O extrator está construído e testado, mas
+não roda: falta o contrato. É a única pendência que não se resolve em código —
+e até ela ser resolvida, a fila fica guardada em `aguardando_extracao`.
+
+Nada do extrator foi exercitado contra o provedor de verdade. O teste cobre o
+comportamento inteiro com um provedor de mentira; o que só a primeira chamada
+real vai dizer é se a transcrição aguenta áudio de trator em movimento, e se o
+esquema sobrevive a sotaque e jargão de região.
 
 `002_exemplo_isolamento.sql` fica: testa `app.aplicar_isolamento` de forma
 independente do domínio.
