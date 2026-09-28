@@ -193,6 +193,7 @@ const RUIDO = new Set([
   'colheu', 'colhi', 'rendeu', 'rendimento', 'produtividade', 'produziu', 'para',
   'com', 'por', 'dos', 'das', 'sobre', 'hectare', 'saca', 'sacas', 'talhao',
   'talhão', 'lavoura', 'fazenda', 'sitio', 'sítio', 'resultado', 'numero',
+  'minha', 'meu', 'meus', 'minhas', 'nossa', 'nosso', 'esse', 'essa', 'aquele',
 ]);
 
 /**
@@ -216,5 +217,33 @@ export function procurarProdutorNoTexto(ctx, texto) {
     if (achados.length === 0) return {};
     if (achados.length === 1) return { achado: achados[0] };
     return { ambiguos: achados };
+  });
+}
+
+/**
+ * Acha um talhão a partir de um texto solto — a pergunta do produtor.
+ *
+ * Mesmos três desfechos da busca por produtor, e pela mesma razão: "Gleba" pode
+ * ser duas, e responder pela errada é dar o número do talhão vizinho.
+ *
+ * Quando o nome INTEIRO aparece na frase, só esses valem: quem escreveu
+ * "Gleba 2" não quer a Gleba 1, e o casamento por pedaço traria as duas.
+ */
+export function procurarTalhaoNoTexto(ctx, texto) {
+  const frase = String(texto ?? '');
+  const termos = frase
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((t) => t.length >= 3 && !RUIDO.has(t.toLowerCase()));
+
+  return comContexto(ctx, async (cx) => {
+    // Lista vazia, e não `['']`: `like '%%'` casaria com TODO talhão, e a
+    // pergunta genérica — "quanto rendeu minha colheita?", que não sobra termo
+    // nenhum — virava "qual deles?" com a lavoura inteira na resposta.
+    const achados = await repo.procurarTalhoes(cx, termos, frase);
+    const inteiros = achados.filter((t) => t.pelo_nome_inteiro);
+    const candidatos = inteiros.length ? inteiros : achados;
+    if (candidatos.length === 0) return {};
+    if (candidatos.length === 1) return { achado: candidatos[0] };
+    return { ambiguos: candidatos };
   });
 }

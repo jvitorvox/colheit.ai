@@ -377,6 +377,41 @@ procurar nome no texto dele só criaria chance de errar.
 > Marli?". Fica registrado porque é o tipo de coisa que parece defeito quando se
 > usa pela primeira vez.
 
+### E o produtor pergunta pelo talhão
+
+Mesmo gesto, outro eixo: o consultor nomeia **produtor**, o produtor nomeia
+**talhão**. Ele tem uma lavoura só; o que varia dentro dela é a gleba, e a
+pergunta específica precisava de resposta específica.
+
+```
+> e a Gleba 2, quanto rendeu?
+Gleba 2: 71,2 sc/ha na safra 26/27, em 900 ha de FS560.
++10,9% em relação à média da sua lavoura (64,2 sc/ha, ponderada pela área).
+
+> quanto rendeu o pivô?
+Pivô do fundo: 52,4 sc/ha na safra 26/27, em 500 ha de FS560.
+-18,4% em relação à média da sua lavoura (64,2 sc/ha, ponderada pela área).
+```
+
+**A comparação é com a própria lavoura, não com a região.** A da região
+precisaria do número do vizinho — que é dele, não nosso para repassar.
+
+O nome é procurado nas **duas direções**, porque as duas acontecem:
+
+| O que ele escreve | Como casa |
+|---|---|
+| "e a Gleba 2, ..." | o nome **inteiro** está dentro da frase |
+| "quanto rendeu o pivô?" | um **pedaço** do nome "Pivô do fundo" |
+
+E quando o nome inteiro casa, só esses valem: quem escreveu "Gleba 2" não quer a
+Gleba 1, e o casamento por pedaço traria as duas — o número tem um caractere e
+não entra nos termos.
+
+Talhão plantado e ainda não colhido responde isso, e não um número. Talhão de
+outro produtor não é alcançável: a busca não sabe de dono, quem limita é a
+política.
+
+
 ### ⚠️ A extração nasce desligada, e é decisão
 
 Áudio de produtor descrevendo a própria lavoura é o dado mais sensível que o

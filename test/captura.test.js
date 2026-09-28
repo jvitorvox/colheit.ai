@@ -421,3 +421,101 @@ test('o consultor não alcança produtor fora do que a política deixa', async (
   assert.doesNotMatch(saidas.corpo.at(-1).texto, /Concorrente/,
     'a busca não sabe de carteira — quem limita é a política, e ela limita');
 });
+
+/* --------------------------------- o produtor pergunta pelo talhão dele */
+
+test('o produtor pergunta pela gleba, e recebe a gleba', async () => {
+  // Ele tem uma lavoura só; o que varia dentro dela é o talhão. É o mesmo
+  // gesto do consultor nomeando produtor.
+  const r = await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'e a Gleba 2, quanto rendeu?',
+  });
+  assert.equal(r.corpo.sobre, 'safra');
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^Gleba 2: 80 sc\/ha na safra 26\/27/);
+  assert.match(texto, /em relação à média da sua lavoura/);
+  assert.match(texto, /ponderada pela área/);
+});
+
+test('"Gleba 2" não traz a Gleba 1 junto', async () => {
+  // O número tem um caractere e não entra nos termos: sem casar o nome INTEIRO
+  // dentro da frase, "gleba" pegaria as duas e a resposta viraria "qual delas?".
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.doesNotMatch(texto, /Qual deles/);
+  assert.doesNotMatch(texto, /Gleba 1/);
+});
+
+test('um pedaço do nome também acha — "pivô" é "Pivô do fundo"', async () => {
+  const t = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Pivô do fundo', areaHa: 500 },
+  });
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS560',
+      marca: 'FS Sementes', areaHa: 500,
+    },
+  });
+  await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+    metodo: 'POST', token: tRevenda,
+    corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 52.4 },
+  });
+
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu o pivô?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^Pivô do fundo: 52,4 sc\/ha/);
+  assert.match(texto, /^-/m, 'abaixo da média da lavoura dele');
+});
+
+test('a pergunta genérica continua genérica', async () => {
+  // Sem termo sobrando depois do ruído, a busca de talhão tem de devolver
+  // NADA — e não casar com todos, que era o efeito de procurar por vazio.
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu minha colheita?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^Safra 26\/27/);
+  assert.doesNotMatch(texto, /Qual deles/);
+});
+
+test('talhão plantado e não colhido responde isso, e não um número', async () => {
+  const t = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Quadra Nova', areaHa: 300 },
+  });
+  await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS2B393',
+      marca: 'FS Sementes', areaHa: 300,
+    },
+  });
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu a Quadra Nova?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /Quadra Nova: plantado na safra 26\/27 com FS2B393/);
+  assert.match(texto, /colheita ainda não registrada/);
+});
+
+test('o talhão de outro produtor não é alcançável pelo nome', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Wilson Kuhn' },
+  });
+  const faz = await req('/cadastro/propriedades', {
+    metodo: 'POST', token: tRevenda,
+    corpo: { nome: 'Fazenda Kuhn', produtorId: outro.corpo.id, municipio: 'Sinop', uf: 'MT' },
+  });
+  await req(`/cadastro/propriedades/${faz.corpo.id}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Chapada do Kuhn', areaHa: 700 },
+  });
+
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu a Chapada do Kuhn?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.doesNotMatch(texto, /Chapada/,
+    'a busca não sabe de dono — quem limita é a política, e ela limita');
+  assert.match(texto, /^Safra 26\/27/);
+});

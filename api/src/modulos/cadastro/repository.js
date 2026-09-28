@@ -173,3 +173,25 @@ export async function procurarProdutores(cx, termos) {
      limit 5`, [termos]);
   return rows;
 }
+
+/**
+ * Procura talhão citado num texto, dos dois jeitos que a pessoa escreve.
+ *
+ * `$2` é a mensagem inteira e `$1` são os termos soltos, porque as duas
+ * direções acontecem: "e a Gleba 2, quanto rendeu?" traz o nome INTEIRO dentro
+ * da frase, e "quanto rendeu o pivô?" traz só um pedaço do nome "Pivô do
+ * fundo". Procurar só por termo faria "Gleba 2" casar também com "Gleba 1",
+ * porque o número tem um caractere e não entra na lista de termos.
+ */
+export async function procurarTalhoes(cx, termos, frase) {
+  const { rows } = await cx.query(`
+    select t.id, t.nome,
+           position(lower(t.nome) in lower($2)) > 0 as pelo_nome_inteiro
+      from talhao t
+     where position(lower(t.nome) in lower($2)) > 0
+        or exists (select 1 from unnest($1::text[]) x
+                    where lower(t.nome) like '%' || lower(x) || '%')
+     order by length(t.nome) desc
+     limit 5`, [termos, frase]);
+  return rows;
+}

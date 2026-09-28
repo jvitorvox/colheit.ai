@@ -153,7 +153,48 @@ async function responderSobreSafra(ctx, texto) {
       ? 'Ainda não tenho plantio registrado na sua carteira.'
       : 'Ainda não tenho plantio registrado no seu nome.';
   }
+
+  // O produtor nomeia TALHÃO, e é o mesmo gesto do consultor nomeando produtor:
+  // ele tem uma lavoura só, e o que varia dentro dela é a gleba. Sem isto, "e a
+  // Gleba 2, quanto rendeu?" devolvia a média da fazenda inteira — a pergunta
+  // era específica e a resposta não.
+  if (ctx.produtor) {
+    const { achado, ambiguos } = await cadastro.procurarTalhaoNoTexto(ctx, texto);
+    if (ambiguos) {
+      return `Qual deles? ${ambiguos.map((t) => t.nome).join(', ')}.`;
+    }
+    if (achado) return respostaDoTalhao(r, achado.nome);
+  }
+
   return maiuscula(resumoDaSafra(r));
+}
+
+/**
+ * O talhão que ele nomeou, comparado com a lavoura dele.
+ *
+ * A comparação é com a própria média, não com a região: a da região precisaria
+ * do número do vizinho, e isso é dele, não nosso para repassar.
+ */
+function respostaDoTalhao(r, nome) {
+  const t = r.porTalhao.find((x) => x.talhao === nome);
+  if (!t) return `${nome}: não tenho plantio registrado na safra ${r.safra}.`;
+  if (t.produtividadeScHa === null) {
+    return `${nome}: plantado na safra ${r.safra}`
+      + `${t.cultivar ? ` com ${t.cultivar}` : ''}, colheita ainda não registrada.`;
+  }
+
+  const n = (v) => Number(v).toLocaleString('pt-BR');
+  const linhas = [
+    `${nome}: ${n(t.produtividadeScHa)} sc/ha na safra ${r.safra}`
+    + `${t.areaHa ? `, em ${n(t.areaHa)} ha` : ''}`
+    + `${t.cultivar ? ` de ${t.cultivar}` : ''}.`,
+  ];
+  if (r.mediaPonderadaScHa !== null && r.colhidos > 1) {
+    const dif = Math.round((t.produtividadeScHa / r.mediaPonderadaScHa - 1) * 1000) / 10;
+    linhas.push(`${dif > 0 ? '+' : ''}${n(dif)}% em relação à média da sua lavoura `
+      + `(${n(r.mediaPonderadaScHa)} sc/ha, ponderada pela área).`);
+  }
+  return linhas.join('\n');
 }
 
 /** Quando a frase ABRE a mensagem, a primeira letra sobe. */
