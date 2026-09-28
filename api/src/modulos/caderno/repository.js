@@ -109,3 +109,79 @@ export async function desempenho(cx, safra) {
      order by media_sc_ha desc nulls last`, [safra ?? null]);
   return rows;
 }
+
+/* --------------------------------------------------- resultado da safra */
+
+/**
+ * O fechamento da safra, na área que o chamador enxerga.
+ *
+ * A produtividade é PONDERADA PELA ÁREA, e não a média das médias. Um talhão de
+ * 40 ha com 80 sc/ha e um de 1.800 ha com 55 não dão 67,5 — dão 55,5. A média
+ * simples é a que faz o ano parecer melhor do que foi, e é a que sai por engano
+ * de um `avg()`.
+ *
+ * `coalesce(pl.area_ha, t.area_ha)` porque o plantio nem sempre traz a área: em
+ * talhão plantado inteiro, quem sabe é o talhão.
+ */
+export async function resultadoDaSafra(cx, safra) {
+  const { rows } = await cx.query(`
+    with base as (
+      select pl.id, pl.cultivar, pl.marca, t.nome as talhao,
+             coalesce(pl.area_ha, t.area_ha) as ha,
+             c.produtividade_sc_ha as sc_ha, c.colhido_em
+        from plantio pl
+        join talhao t on t.id = pl.talhao_id
+        left join colheita c on c.plantio_id = pl.id
+       where pl.safra = $1
+    )
+    select count(*)::int                                            as talhoes,
+           count(sc_ha)::int                                        as colhidos,
+           coalesce(sum(ha), 0)                                     as area_ha,
+           coalesce(sum(ha) filter (where sc_ha is not null), 0)    as area_colhida_ha,
+           coalesce(sum(ha * sc_ha) filter (where sc_ha is not null), 0) as total_sc,
+           case when sum(ha) filter (where sc_ha is not null) > 0
+                then round(sum(ha * sc_ha) filter (where sc_ha is not null)
+                           / sum(ha) filter (where sc_ha is not null), 1)
+                end                                                 as media_ponderada_sc_ha,
+           max(colhido_em)                                          as ultima_colheita
+      from base`, [safra]);
+  return rows[0];
+}
+
+export async function talhoesDaSafra(cx, safra) {
+  const { rows } = await cx.query(`
+    select t.nome as talhao, pl.cultivar, pl.marca,
+           coalesce(pl.area_ha, t.area_ha) as area_ha,
+           c.produtividade_sc_ha as sc_ha, c.colhido_em, c.umidade
+      from plantio pl
+      join talhao t on t.id = pl.talhao_id
+      left join colheita c on c.plantio_id = pl.id
+     where pl.safra = $1
+     order by c.produtividade_sc_ha desc nulls last, t.nome`, [safra]);
+  return rows;
+}
+
+
+/**
+ * A produtividade ponderada de CADA safra, numa consulta só.
+ *
+ * Serve à lista de safras e à comparação ao mesmo tempo: safra plantada e não
+ * colhida aparece com média nula, e quem compara sabe pular.
+ */
+export async function mediaPorSafra(cx) {
+  const { rows } = await cx.query(`
+    select pl.safra,
+           case when sum(coalesce(pl.area_ha, t.area_ha))
+                     filter (where c.produtividade_sc_ha is not null) > 0
+                then round(sum(coalesce(pl.area_ha, t.area_ha) * c.produtividade_sc_ha)
+                           filter (where c.produtividade_sc_ha is not null)
+                         / sum(coalesce(pl.area_ha, t.area_ha))
+                           filter (where c.produtividade_sc_ha is not null), 1)
+                end as media_ponderada_sc_ha
+      from plantio pl
+      join talhao t on t.id = pl.talhao_id
+      left join colheita c on c.plantio_id = pl.id
+     group by pl.safra
+     order by pl.safra desc`);
+  return rows;
+}

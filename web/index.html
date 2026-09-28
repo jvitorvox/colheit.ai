@@ -43,6 +43,23 @@ body{padding:0 0 calc(74px + env(safe-area-inset-bottom))}
 
 /* Um plantio dentro do cartão da safra. A régua à esquerda liga as linhas do
    mesmo talhão sem precisar de mais um cartão dentro do cartão. */
+/* O número do ano. É o que ele abre a tela para ver. */
+.num.grande.resultado{font-size:2.25rem;line-height:1.1;letter-spacing:-.02em;
+  color:var(--marca);margin:8px 0 2px}
+.variacao{font-size:.875rem;font-weight:600;padding-bottom:6px}
+.variacao.sobe{color:var(--marca)}
+.variacao.desce{color:var(--alerta)}
+
+/* Talhão a talhão, do melhor ao pior. Mesma gramática do funil do console. */
+.faixa-talhao{display:grid;grid-template-columns:1fr auto;gap:3px 10px;
+  grid-template-areas:"nome num" "medidor medidor";align-items:center;
+  font-size:.875rem;padding:6px 0}
+.faixa-talhao>span:first-child{grid-area:nome}
+.faixa-talhao>span:last-child{grid-area:num;font-weight:600}
+.faixa-talhao>.medidor{grid-area:medidor;height:9px;background:var(--papel-2);
+  border:1px solid var(--linha);border-radius:5px;overflow:hidden}
+.faixa-talhao .medidor i{display:block;height:100%;background:var(--marca-2)}
+
 /* Item da lista de preparo: o alvo é a linha inteira, não a caixinha — no
    celular, com a mão suja, ninguém acerta 16px. */
 .preparo-item{display:flex;align-items:flex-start;gap:11px;padding:11px 0;

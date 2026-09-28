@@ -492,12 +492,17 @@ const dataHora = (d) => (d
  * leitura comercial, serve ao share por marca, e não diz nada a quem plantou.
  */
 async function telaCaderno(raiz) {
-  const [plantios, desempenho] = await Promise.all([
-    api('/caderno/plantios'), api('/caderno/desempenho'),
+  const [plantios, desempenho, resultado] = await Promise.all([
+    api('/caderno/plantios'), api('/caderno/desempenho'), api('/caderno/resultado'),
   ]);
 
   const area = el('section');
   area.append(cabecalho('Caderno de campo', 'O que foi plantado na sua terra'));
+
+  // O resultado vem antes do que foi plantado: é o fim do laço, e é a pergunta
+  // que ele faz primeiro — como foi o ano. Aba própria seria a sexta em 375px,
+  // e o assunto é o mesmo: o que entrou no talhão e o que saiu dele.
+  if (resultado?.safra) area.append(cartaoResultado(resultado));
 
   if (plantios.length === 0) {
     area.append(vazio('Nada registrado ainda. O consultor anota o plantio, '
@@ -531,6 +536,72 @@ async function telaCaderno(raiz) {
 
   if (desempenho.length) area.append(cartaoDesempenho(desempenho));
   raiz.replaceChildren(area);
+}
+
+/**
+ * O resultado da safra: o fim do laço.
+ *
+ * A semente que saiu do pedido virou saco por hectare. Para a revenda o número
+ * volta ao funil da safra seguinte; para ele é o ano dele, e é o único lugar do
+ * sistema que responde "como foi".
+ */
+function cartaoResultado(r) {
+  const c = el('article', 'cartao destaque');
+  const topo = el('div', 'linha');
+  topo.append(el('strong', null, `Safra ${r.safra}`),
+    el('span', r.fechada ? 'etiqueta boa' : 'etiqueta',
+      r.fechada ? 'fechada' : `${r.colhidos} de ${r.talhoes} colhidos`));
+  c.append(topo);
+
+  if (r.mediaPonderadaScHa === null) {
+    c.append(el('p', 'obs',
+      'Nenhuma colheita registrada nesta safra ainda. O número aparece aqui '
+      + 'quando o consultor lançar a primeira.'));
+    return c;
+  }
+
+  const numero = el('p', 'num grande resultado');
+  numero.textContent = `${r.mediaPonderadaScHa.toLocaleString('pt-BR')} sc/ha`;
+  c.append(numero);
+
+  // A variação com a safra anterior é o que ele olha primeiro — e a resposta diz
+  // COM QUAL safra está comparando, porque ela pula ano sem colheita.
+  if (r.anterior) {
+    const v = r.anterior.variacaoPct;
+    const linha = el('p', v >= 0 ? 'variacao sobe' : 'variacao desce');
+    linha.textContent = `${v > 0 ? '+' : ''}${v.toLocaleString('pt-BR')}% `
+      + `em relação à safra ${r.anterior.safra} `
+      + `(${r.anterior.mediaPonderadaScHa.toLocaleString('pt-BR')} sc/ha)`;
+    c.append(linha);
+  }
+
+  const n = el('div', 'linha');
+  n.append(el('span', null, `${r.areaColhidaHa.toLocaleString('pt-BR')} ha colhidos`),
+    el('span', 'num', `${r.totalSc.toLocaleString('pt-BR')} sc no total`));
+  c.append(n);
+
+  // A frase vem da API de propósito: média simples de talhões de tamanhos
+  // diferentes faz o ano parecer melhor do que foi.
+  c.append(el('p', 'obs', r.base.charAt(0).toUpperCase() + r.base.slice(1) + '.'));
+
+  const colhidos = r.porTalhao.filter((t) => t.produtividadeScHa !== null);
+  if (colhidos.length > 1) {
+    c.append(el('p', 'rotulo', 'Por talhão, do melhor ao pior'));
+    const maior = colhidos[0].produtividadeScHa;
+    colhidos.forEach((t) => {
+      const l = el('div', 'faixa-talhao');
+      const medidor = el('div', 'medidor');
+      const barra = el('i');
+      barra.style.width = `${(t.produtividadeScHa / maior) * 100}%`;
+      medidor.append(barra);
+      l.append(el('span', null, t.talhao), medidor,
+        el('span', 'num', `${t.produtividadeScHa.toLocaleString('pt-BR')}`));
+      c.append(l);
+      l.title = [t.cultivar, t.marca, `${t.areaHa.toLocaleString('pt-BR')} ha`]
+        .filter(Boolean).join(' · ');
+    });
+  }
+  return c;
 }
 
 function linhaDePlantio(p) {

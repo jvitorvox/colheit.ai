@@ -423,6 +423,32 @@ Ele **lê e não escreve** — quem fecha o registro é o consultor, e a políti
 exige sessão de empresa. O caminho dele para contribuir é o WhatsApp: foto do
 saco, áudio do plantio, e o consultor valida. A tela vazia diz exatamente isso.
 
+### O resultado da safra — e a média que engana
+
+No topo do caderno, porque é a pergunta que ele faz primeiro: **como foi o ano**.
+É o fim do laço — a semente que saiu do pedido virou saco por hectare. Para a
+revenda o número volta ao funil da safra seguinte; para ele é o ano dele.
+
+> A produtividade é **ponderada pela área colhida**, não a média dos talhões.
+>
+> Um talhão de 40 ha com 88 sc/ha e um de 1.800 ha com 55 não dão 71,5 — dão
+> **55,7**. A média simples é a que faz o ano parecer melhor do que foi, e é
+> exatamente a que sai por engano de um `avg()`. A frase viaja com o número até a
+> tela, como no share por marca.
+
+O que ainda não colheu **não dilui**: fica de fora da área colhida em vez de
+entrar como zero, e o cartão diz `3 de 4 colhidos` em vez de se declarar fechado.
+
+A comparação é com a última safra que **produziu número**, não com a
+imediatamente anterior — safra plantada e ainda não colhida, ou ano pulado,
+daria uma variação sobre nada. A resposta carrega qual safra foi usada, então
+pular é honesto: `+14,8% em relação à safra 25/26 (58,1 sc/ha)`.
+
+`/caderno/resultado` atende as duas sessões, como o resto do caderno: a política
+decide se é a terra de um produtor ou a carteira da revenda. Não virou aba
+própria porque seria a sexta em 375px, e o assunto é o mesmo do caderno — o que
+entrou no talhão e o que saiu dele.
+
 ### Ele não sabe quem consulta, mas sabe quem entrou na porteira
 
 São coisas diferentes, e a diferença é fácil de desfazer por engano depois.
@@ -823,6 +849,7 @@ Aqui ele finalmente tem de onde sair.
 ```
 GET  /caderno/plantios              o que foi plantado (o produtor vê o dele)
 GET  /caderno/desempenho            como cada cultivar se saiu
+GET  /caderno/resultado             o fechamento da safra, ponderado pela área
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige
 POST /caderno/plantios/:id/colheita fecha o laço

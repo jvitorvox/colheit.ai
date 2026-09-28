@@ -133,3 +133,76 @@ export async function registrarDePlanteRelato(ctx, relato) {
     relatoId: relato.id,
   });
 }
+
+/* --------------------------------------------------- resultado da safra */
+
+/**
+ * O fechamento da safra: o que entrou no talhão e o que saiu dele.
+ *
+ * É o fim do laço — a semente que saiu do pedido virou saco por hectare. Para a
+ * revenda o número volta ao funil da safra seguinte; para o produtor é o ano
+ * dele, e é o único lugar do sistema que responde "como foi".
+ *
+ * Quem enxerga o quê é a política: o produtor vê a terra dele, a empresa vê a
+ * carteira. A mesma resposta serve aos dois.
+ */
+export function resultadoDaSafra(ctx, safra) {
+  return comContexto(ctx, async (cx) => {
+    const porSafra = await repo.mediaPorSafra(cx);
+    const safras = porSafra.map((s) => s.safra);
+    const atual = safra ? textoObrigatorio(safra, 'safra', 10) : safras[0];
+    if (!atual) return { safra: null, safras: [], semRegistro: true };
+
+    // A comparação é com a última safra que PRODUZIU número, não com a
+    // imediatamente anterior. Safra plantada e ainda não colhida — ou ano
+    // pulado — daria uma variação sobre nada, e a resposta diz qual safra foi
+    // usada, então pular é honesto.
+    const anteriorLinha = porSafra
+      .slice(safras.indexOf(atual) + 1)
+      .find((s) => s.media_ponderada_sc_ha !== null) ?? null;
+
+    const [bruto, talhoes] = await Promise.all([
+      repo.resultadoDaSafra(cx, atual),
+      repo.talhoesDaSafra(cx, atual),
+    ]);
+
+    const media = numeroOuNulo(bruto.media_ponderada_sc_ha);
+    const mediaAnterior = numeroOuNulo(anteriorLinha?.media_ponderada_sc_ha);
+    const anterior = anteriorLinha?.safra ?? null;
+
+    return {
+      safra: atual,
+      safras,
+      talhoes: bruto.talhoes,
+      colhidos: bruto.colhidos,
+      areaHa: Number(bruto.area_ha),
+      areaColhidaHa: Number(bruto.area_colhida_ha),
+      totalSc: Math.round(Number(bruto.total_sc)),
+      mediaPonderadaScHa: media,
+      // A frase viaja com o número: média simples de talhões de tamanhos
+      // diferentes faz o ano parecer melhor do que foi.
+      base: 'média ponderada pela área colhida — não é a média dos talhões',
+      ultimaColheita: bruto.ultima_colheita,
+      fechada: bruto.talhoes > 0 && bruto.colhidos === bruto.talhoes,
+      anterior: anterior && mediaAnterior !== null
+        ? {
+          safra: anterior,
+          mediaPonderadaScHa: mediaAnterior,
+          variacaoPct: media === null ? null
+            : Number(((media - mediaAnterior) / mediaAnterior * 100).toFixed(1)),
+        }
+        : null,
+      porTalhao: talhoes.map((t) => ({
+        talhao: t.talhao,
+        cultivar: t.cultivar,
+        marca: t.marca,
+        areaHa: Number(t.area_ha ?? 0),
+        produtividadeScHa: numeroOuNulo(t.sc_ha),
+        colhidoEm: t.colhido_em,
+        umidade: numeroOuNulo(t.umidade),
+      })),
+    };
+  });
+}
+
+const numeroOuNulo = (v) => (v === null || v === undefined ? null : Number(v));

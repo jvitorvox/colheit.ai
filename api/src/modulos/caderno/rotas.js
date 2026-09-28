@@ -31,3 +31,9 @@ rotasCaderno.post('/plantios', soEmpresa, rota(async (req, res) => {
 rotasCaderno.post('/plantios/:id/colheita', soEmpresa, rota(async (req, res) => {
   res.status(201).json(await servico.registrarColheita(req.ctx, req.params.id, req.body ?? {}));
 }));
+
+// O fechamento da safra. Serve às duas sessões, como o resto do caderno: a
+// política decide se é a terra de um produtor ou a carteira da revenda.
+rotasCaderno.get('/resultado', rota(async (req, res) => {
+  res.json(await servico.resultadoDaSafra(req.ctx, req.query.safra));
+}));

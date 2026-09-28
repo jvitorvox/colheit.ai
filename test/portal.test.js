@@ -469,3 +469,87 @@ test('o preparo de um pedido alheio não é dele', async () => {
   const r = await req(`/pedidos/${alheio.corpo.id}/preparo`, { token: tProdutor });
   assert.equal(r.status, 404, 'do ponto de vista dele, esse pedido não existe');
 });
+
+/* ---------------------------------------------------- resultado da safra */
+
+test('o resultado da safra pondera pela área, não faz média de médias', async () => {
+  // Um talhão pequeno e ótimo, um grande e mediano. A média simples seria 71,5
+  // e o ano pareceria muito melhor do que foi.
+  const t = (await req(`/cadastro/propriedades/${propriedadeId}/talhoes`,
+    { token: tRevenda })).corpo;
+  const pequeno = t.find((x) => x.nome === 'Gleba 1');
+  const grande = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba Grande', areaHa: 1800 },
+  });
+
+  const plantar = async (talhaoId, areaHa, scHa) => {
+    const pl = await req('/caderno/plantios', {
+      metodo: 'POST', token: tRevenda,
+      corpo: { talhaoId, safra: '28/29', cultivar: 'FS560', marca: 'FS Sementes', areaHa },
+    });
+    assert.equal(pl.status, 201, JSON.stringify(pl.corpo));
+    await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+      metodo: 'POST', token: tRevenda,
+      corpo: { colhidoEm: '2029-03-10', produtividadeScHa: scHa },
+    });
+  };
+  await plantar(pequeno.id, 40, 88);
+  await plantar(grande.corpo.id, 1800, 55);
+
+  const r = await req('/caderno/resultado?safra=28/29', { token: tProdutor });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.areaHa, 1840);
+  assert.equal(r.corpo.areaColhidaHa, 1840);
+  assert.equal(r.corpo.mediaPonderadaScHa, 55.7,
+    'ponderada: (40×88 + 1800×55) / 1840 — a média simples daria 71,5');
+  assert.equal(r.corpo.totalSc, 40 * 88 + 1800 * 55);
+  assert.match(r.corpo.base, /não é a média dos talhões/);
+  assert.equal(r.corpo.fechada, true);
+});
+
+test('o melhor talhão vem primeiro — é o que ele quer saber', async () => {
+  const r = await req('/caderno/resultado?safra=28/29', { token: tProdutor });
+  assert.equal(r.corpo.porTalhao[0].talhao, 'Gleba 1');
+  assert.equal(r.corpo.porTalhao[0].produtividadeScHa, 88);
+  assert.equal(r.corpo.porTalhao.at(-1).produtividadeScHa, 55);
+});
+
+test('safra em andamento não se declara fechada', async () => {
+  const t = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba Aberta', areaHa: 200 },
+  });
+  await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: { talhaoId: t.corpo.id, safra: '28/29', cultivar: 'FS560', marca: 'FS Sementes', areaHa: 200 },
+  });
+
+  const r = await req('/caderno/resultado?safra=28/29', { token: tProdutor });
+  assert.equal(r.corpo.fechada, false);
+  assert.equal(r.corpo.colhidos, 2);
+  assert.equal(r.corpo.talhoes, 3);
+  assert.equal(r.corpo.areaColhidaHa, 1840, 'o que não colheu não entra na área colhida');
+  assert.equal(r.corpo.mediaPonderadaScHa, 55.7, 'nem dilui a produtividade com zero');
+});
+
+test('a comparação é com a safra anterior REGISTRADA, não com o ano menos um', async () => {
+  const r = await req('/caderno/resultado?safra=28/29', { token: tProdutor });
+  assert.ok(r.corpo.anterior, 'há safra anterior com colheita');
+  assert.notEqual(r.corpo.anterior.safra, '27/28',
+    'safra sem colheita não vira base de comparação com zero');
+  assert.equal(typeof r.corpo.anterior.variacaoPct, 'number');
+});
+
+test('sem safra pedida, vale a mais recente registrada', async () => {
+  const r = await req('/caderno/resultado', { token: tProdutor });
+  assert.equal(r.corpo.safra, r.corpo.safras[0]);
+  assert.ok(r.corpo.safras.length >= 2);
+});
+
+test('o resultado da revenda não mistura a terra de outro produtor', async () => {
+  const dela = await req('/caderno/resultado?safra=28/29', { token: tRevenda });
+  const dele = await req('/caderno/resultado?safra=28/29', { token: tProdutor });
+  assert.equal(dela.status, 200);
+  assert.ok(dela.corpo.areaHa >= dele.corpo.areaHa,
+    'a revenda enxerga a carteira; ele enxerga a terra dele');
+  assert.ok(dele.corpo.porTalhao.every((t) => t.talhao !== 'Quadra A'));
+});
