@@ -5,7 +5,10 @@
 // produtor é de leitura, e fila de sincronização é problema do aplicativo do
 // consultor, que é quem trabalha em área sem sinal.
 
-const VERSAO = 'v1';
+// Virar a versão APAGA a casca e os dados guardados, e é obrigatório sempre que
+// `/app.js` ou `/base.css` mudam: a casca é servida cache-primeiro, então sem
+// isto o produtor continuaria abrindo a versão velha do portal para sempre.
+const VERSAO = 'v2';
 const CASCA = `casca-${VERSAO}`;
 const DADOS = `dados-${VERSAO}`;
 
@@ -78,7 +81,10 @@ self.addEventListener('fetch', (ev) => {
   );
 });
 
-const ehApi = (p) => ['/auth/', '/pedidos', '/cadastro/', '/push/', '/captura/']
+// `/midia` fica FORA desta lista de propósito: a volta pelo cache desserializa
+// a resposta como JSON, e foto não é JSON. Ela cai no ramo da casca, que é
+// cache-primeiro — e está certo, porque mídia é imutável pelo id.
+const ehApi = (p) => ['/auth/', '/pedidos', '/cadastro/', '/push/', '/captura/', '/visitas']
   .some((raiz) => p.startsWith(raiz));
 
 /* ------------------------------------------------------------------ push */

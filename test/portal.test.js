@@ -1,7 +1,8 @@
 // O portal: a casca que o navegador baixa, e o que a sessão do produtor lê.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { encerrar } from '../api/src/db.js';
+import { dono, encerrar } from '../api/src/db.js';
+import { comContexto } from '../api/src/contexto.js';
 import { migrar } from '../api/src/migrar.js';
 import { subirApi, criarTenant, criarUsuario, entrar, limparBase } from './ajuda.js';
 
@@ -119,4 +120,113 @@ test('a jornada inteira do portal, numa sessão só', async () => {
 
   const lavoura = await req('/cadastro/minha-lavoura', { token: tProdutor });
   assert.equal(lavoura.corpo.length, 1);
+});
+
+/* ------------------------------------------------------ a tela de visitas */
+
+const JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
+  + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
+  + 'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
+
+let visitaComFoto;
+
+test('a visita do consultor aparece para o produtor, com a foto do talhão', async () => {
+  const foto = await fetch(`${base}/midia`, {
+    method: 'POST',
+    headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${tRevenda}` },
+    body: JPEG,
+  }).then((r) => r.json());
+
+  const v = await req('/visitas', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      produtorId, canal: 'app', duracaoSeg: 38, estagio: 'V6', estande: 58,
+      observacao: 'Estande bom, lagarta na bordadura.', midiaIds: [foto.id],
+    },
+  });
+  assert.equal(v.status, 201);
+  visitaComFoto = v.corpo.id;
+
+  const minhas = await req('/visitas', { token: tProdutor });
+  assert.equal(minhas.status, 200);
+  const lida = minhas.corpo.find((x) => x.id === visitaComFoto);
+  assert.ok(lida, 'ele vê quem esteve na lavoura dele');
+
+  // O que a tela mostra tem de vir na resposta — senão a tela inventa.
+  assert.equal(lida.consultor, 'Gestora', 'quem entrou na porteira tem nome');
+  assert.equal(lida.estagio, 'V6');
+  assert.match(lida.observacao, /lagarta/);
+  assert.deepEqual(lida.fotos, [foto.id]);
+});
+
+test('e ele abre a foto — a lavoura é dele, a foto dela também', async () => {
+  const lida = (await req('/visitas', { token: tProdutor })).corpo
+    .find((x) => x.id === visitaComFoto);
+  const r = await fetch(`${base}/midia/${lida.fotos[0]}`, {
+    headers: { authorization: `Bearer ${tProdutor}` },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-type'), 'image/jpeg');
+  assert.match(r.headers.get('cache-control'), /private/);
+});
+
+test('visita de outro produtor não entra na lista dele', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Wilson Kuhn' },
+  });
+  const alheia = await req('/visitas', {
+    metodo: 'POST', token: tRevenda,
+    corpo: { produtorId: outro.corpo.id, canal: 'app', duracaoSeg: 20 },
+  });
+  assert.equal(alheia.status, 201);
+
+  const minhas = await req('/visitas', { token: tProdutor });
+  assert.ok(!minhas.corpo.some((x) => x.id === alheia.corpo.id));
+  assert.ok(minhas.corpo.every((x) => x.produtor === 'José Cesar Sabo'));
+});
+
+test('ele lê a visita e não escreve nenhuma', async () => {
+  const r = await req('/visitas', {
+    metodo: 'POST', token: tProdutor, corpo: { produtorId, canal: 'app' },
+  });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+});
+
+test('a tela de visitas existe no portal, e o menu leva até ela', async () => {
+  const js = await (await buscar('/app.js')).text();
+  assert.match(js, /telaVisitas/);
+  assert.match(js, /'#\/visitas'/, 'sem entrada no menu a tela é inalcançável');
+  // A duração é a medição da H1 — é do nosso processo, não do produtor.
+  assert.doesNotMatch(js.slice(js.indexOf('async function telaVisitas'),
+    js.indexOf('/* ------------------------------------------------------------------ apoio */')),
+  /duracao_seg/, 'o portal não mostra quanto o consultor levou para registrar');
+});
+
+test('o service worker guarda /visitas, e virou de versão junto com a casca', async () => {
+  // A casca é servida cache-primeiro: mudar app.js sem virar a versão deixaria
+  // o produtor no portal velho para sempre.
+  const js = await (await buscar('/sw.js')).text();
+  assert.match(js, /'\/visitas'/, 'sem isso a tela fica em branco sem sinal');
+  assert.doesNotMatch(js, /const VERSAO = 'v1'/, 'app.js mudou; a versão tem de virar');
+});
+
+test('a abertura em usuario é só para quem visitou ESTE produtor', async () => {
+  // A política abre a linha do consultor que esteve na lavoura dele. Não pode
+  // abrir a do resto da empresa — nem a de quem visitou outro produtor.
+  const { rows } = await dono.query('select id, nome from usuario');
+  assert.ok(rows.length >= 1);
+
+  const vistos = await comContexto({ produtor: produtorId }, (cx) =>
+    cx.query('select nome from usuario').then((r) => r.rows.map((x) => x.nome)));
+  assert.deepEqual(vistos, ['Gestora'], 'só quem registrou visita para ele');
+
+  const semVisita = await criarUsuario(
+    (await dono.query('select tenant_id from usuario limit 1')).rows[0].tenant_id,
+    'Nunca Foi', 'nuncafoi@3t.com', 'consultor');
+  assert.ok(semVisita);
+  const depois = await comContexto({ produtor: produtorId }, (cx) =>
+    cx.query('select nome from usuario').then((r) => r.rows.map((x) => x.nome)));
+  assert.deepEqual(depois, ['Gestora'], 'quem não foi ao campo continua invisível');
 });

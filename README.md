@@ -338,15 +338,36 @@ web/sw.js        cache da casca e recebimento do push
 web/manifest.json
 ```
 
-### Três telas
+### Quatro telas
 
 **Entrar** — telefone e código, sem senha. **Meus pedidos** — progresso compacto por
 cartão; dez etiquetas em 314px de celular ficam ilegíveis e obrigam a arrastar de
 lado para ver o que ele quer saber. **Detalhe** — aí sim a faixa completa das dez
 etapas, mais nota, boleto e histórico. **Minha lavoura** — a terra e os talhões.
+**Visitas** — quem esteve na lavoura dele, de todas as revendas, com as fotos do
+talhão.
 
 Na etapa 6 aparece o **Dia Zero**: entre saber que a carga saiu e ela chegar, é a
 janela para acertar máquina, equipe e regulagem.
+
+### Ele não sabe quem consulta, mas sabe quem entrou na porteira
+
+São coisas diferentes, e a diferença é fácil de desfazer por engano depois.
+Acesso ao dado por terceiro na cadeia é a decisão da seção 08 — o produtor não é
+informado. **Serviço prestado na terra dele, por gente que passou pela porteira,
+é dele saber**: a tela mostra o nome do consultor, a data, o talhão, o estádio e
+o que foi anotado.
+
+O que ela **não** mostra: `duracao_seg`, que é a medição da H1 e diz respeito ao
+nosso processo, não a ele; e `canal`, que é encanamento nosso.
+
+Fazer o nome aparecer custou uma política. A 018 já dizia a intenção — "o
+produtor vê quem esteve na lavoura dele" — mas `usuario` tem isolamento por
+tenant, e a sessão do portal não tem tenant: o `left join` devolvia nome nulo,
+**em silêncio**, e a tela mostraria "Consultor" genérico sem ninguém desconfiar.
+A 027 abre exatamente a linha de quem registrou visita para aquele produtor, e a
+subconsulta passa pela política de `visita` — sem função `security definer` que
+devolva nome de usuário por id solto.
 
 ### Offline é leitura, e só
 
@@ -356,7 +377,14 @@ em branco no meio do talhão. **Fila de escrita não entra aqui**: o portal é d
 leitura, e sincronização offline é problema do aplicativo do consultor, que é quem
 trabalha onde não há sinal.
 
-Resposta de `/auth/` nunca é guardada.
+Resposta de `/auth/` nunca é guardada. `/midia` também fica fora da lista de
+consultas: a volta pelo cache desserializa a resposta como JSON, e foto não é
+JSON — ela cai no ramo da casca, cache-primeiro, que é o certo porque mídia é
+imutável pelo id.
+
+⚠️ A casca é servida **cache-primeiro**. Mexeu em `app.js` ou `base.css`? Vire
+`VERSAO` no `sw.js`, senão o produtor continua abrindo o portal velho para
+sempre — e ninguém liga uma coisa à outra. Há teste conferindo isso.
 
 ### Cache em desenvolvimento
 
@@ -488,9 +516,8 @@ binário. Há teste para exatamente esse meio-caminho.
 Seis fotos por visita, no cliente e no servidor. Mais que isso é álbum, e cada
 foto é uma subida a mais numa conexão que já está ruim.
 
-As fotos aparecem em **Visitas**, no console — foto que ninguém vê não valia ter
-sido tirada. No portal do produtor ainda não: ele não tem tela de visitas, e ela
-é trabalho à parte.
+As fotos aparecem em **Visitas**, no console, e na tela de **Visitas** do portal
+do produtor — foto que ninguém vê não valia ter sido tirada.
 
 ### O que ficou de fora, e por quê
 

@@ -269,6 +269,78 @@ async function telaLavoura(raiz) {
   raiz.replaceChildren(area);
 }
 
+/* ---------------------------------------------------------------- visitas */
+
+/**
+ * Quem esteve na lavoura dele, e quando.
+ *
+ * Aqui há uma distinção que não pode ser desfeita por engano mais tarde: o
+ * produtor NÃO sabe quem consulta os dados dele — é decisão registrada na
+ * seção 08 —, mas sabe muito bem quem entrou na porteira. Uma coisa é acesso a
+ * dado por terceiro na cadeia; a outra é serviço prestado a ele, na terra
+ * dele. O nome do consultor aparece de propósito.
+ *
+ * O que NÃO aparece: `duracao_seg`, que é a medição da H1 e diz respeito ao
+ * nosso processo, não ao dele; e `canal`, que é encanamento nosso.
+ */
+async function telaVisitas(raiz) {
+  const visitas = await api('/visitas');
+  const area = el('section');
+  area.append(cabecalho('Visitas', 'Quem esteve na sua lavoura, de todas as revendas'));
+
+  if (visitas.length === 0) {
+    area.append(vazio('Nenhuma visita registrada ainda.'));
+    raiz.replaceChildren(area);
+    return;
+  }
+
+  visitas.forEach((v) => {
+    const c = el('article', 'cartao');
+    const topo = el('div', 'linha');
+    topo.append(el('strong', null, v.consultor ?? 'Consultor'),
+      el('span', 'id', dataHora(v.em)));
+    c.append(topo);
+
+    const detalhe = [v.talhao, v.estagio ? `estádio ${v.estagio}` : null,
+      v.estande ? `estande ${Number(v.estande).toLocaleString('pt-BR')}` : null]
+      .filter(Boolean).join(' · ');
+    if (detalhe) c.append(el('p', 'sub', detalhe));
+    if (v.observacao) c.append(el('p', 'obs', v.observacao));
+
+    if (v.fotos?.length) c.append(galeriaDaVisita(v));
+    area.append(c);
+  });
+
+  raiz.replaceChildren(area);
+}
+
+/** As fotos do talhão. Buscadas com a sessão: a rota é privada. */
+function galeriaDaVisita(v) {
+  const g = el('div', 'galeria');
+  v.fotos.forEach((id) => {
+    const cx = el('div', 'miniatura');
+    fetch(`/midia/${id}`, { headers: { authorization: `Bearer ${estado.token}` } })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+      .then((blob) => {
+        const img = el('img');
+        img.src = URL.createObjectURL(blob);
+        img.alt = `foto da visita de ${v.consultor ?? 'consultor'}`;
+        // Tag de imagem não carrega cabeçalho de autorização, então o caminho é
+        // o blob; soltar a URL depois de desenhar evita segurar a foto inteira
+        // na memória a cada rolagem.
+        img.onload = () => URL.revokeObjectURL(img.src);
+        cx.replaceChildren(img);
+      })
+      .catch(() => cx.replaceChildren(el('span', 'sub', '—')));
+    g.append(cx);
+  });
+  return g;
+}
+
+const dataHora = (d) => (d
+  ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  : '—');
+
 /* ------------------------------------------------------------------ apoio */
 
 function cabecalho(titulo, sub, voltar) {
@@ -289,7 +361,8 @@ const vazio = (t) => el('p', 'vazio', t);
 
 function barraInferior() {
   const nav = el('nav', 'abas');
-  [['Pedidos', '#/'], ['Lavoura', '#/lavoura'], ['Sair', '#sair']].forEach(([nome, destino]) => {
+  [['Pedidos', '#/'], ['Lavoura', '#/lavoura'], ['Visitas', '#/visitas'],
+    ['Sair', '#sair']].forEach(([nome, destino]) => {
     const b = el('button', location.hash === destino || (destino === '#/' && !location.hash)
       ? 'ativa' : '', nome);
     b.onclick = () => { if (destino === '#sair') sair(); else location.hash = destino; };
@@ -345,6 +418,7 @@ async function desenhar() {
     const rota = location.hash.replace(/^#\/?/, '');
     if (rota.startsWith('pedido/')) await telaPedido(raiz, rota.slice(7));
     else if (rota === 'lavoura') await telaLavoura(raiz);
+    else if (rota === 'visitas') await telaVisitas(raiz);
     else await telaPedidos(raiz);
     $('#rodape').replaceChildren(barraInferior());
   } catch (e) {
