@@ -204,12 +204,24 @@ test('a tela de visitas existe no portal, e o menu leva até ela', async () => {
   /duracao_seg/, 'o portal não mostra quanto o consultor levou para registrar');
 });
 
-test('o service worker guarda /visitas, e virou de versão junto com a casca', async () => {
-  // A casca é servida cache-primeiro: mudar app.js sem virar a versão deixaria
-  // o produtor no portal velho para sempre.
+test('o que a tela consulta, o service worker guarda', async () => {
   const js = await (await buscar('/sw.js')).text();
-  assert.match(js, /'\/visitas'/, 'sem isso a tela fica em branco sem sinal');
-  assert.doesNotMatch(js, /const VERSAO = 'v1'/, 'app.js mudou; a versão tem de virar');
+  for (const rota of ['/visitas', '/caderno']) {
+    assert.match(js, new RegExp(`'${rota}'`), `sem ${rota} a tela fica em branco sem sinal`);
+  }
+});
+
+test('a casca guarda tudo que o portal carrega', async () => {
+  // Invariante que dá para verificar, ao contrário da virada de VERSAO: um
+  // arquivo novo no HTML e esquecido aqui faz o app abrir quebrado sem sinal.
+  const html = await (await buscar('/')).text();
+  const js = await (await buscar('/sw.js')).text();
+  const arquivos = [...html.matchAll(/(?:src|href)="(\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(arquivos.length >= 3);
+  for (const a of arquivos) {
+    if (a.endsWith('.png') || a.endsWith('.svg')) continue;   // ícone é do manifest
+    assert.match(js, new RegExp(`'${a}'`), `${a} precisa entrar em ARQUIVOS`);
+  }
 });
 
 test('a abertura em usuario é só para quem visitou ESTE produtor', async () => {
@@ -229,4 +241,117 @@ test('a abertura em usuario é só para quem visitou ESTE produtor', async () =>
   const depois = await comContexto({ produtor: produtorId }, (cx) =>
     cx.query('select nome from usuario').then((r) => r.rows.map((x) => x.nome)));
   assert.deepEqual(depois, ['Gestora'], 'quem não foi ao campo continua invisível');
+});
+
+/* ------------------------------------------------- o caderno de campo dele */
+
+let talhaoId;
+
+test('o produtor lê o caderno de campo da terra dele', async () => {
+  const t = (await req(`/cadastro/propriedades/${propriedadeId}/talhoes`,
+    { token: tRevenda })).corpo;
+  talhaoId = t[0].id;
+
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId, safra: '26/27', cultivar: 'FS560', marca: 'FS Sementes',
+      areaHa: 420, lote: '24-0904', populacao: 320,
+    },
+  });
+  assert.equal(pl.status, 201);
+  await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+    metodo: 'POST', token: tRevenda,
+    corpo: { colhidoEm: '2027-03-12', produtividadeScHa: 68.4 },
+  });
+
+  const meu = await req('/caderno/plantios', { token: tProdutor });
+  assert.equal(meu.status, 200);
+  const linha = meu.corpo.find((p) => p.id === pl.corpo.id);
+  assert.ok(linha, 'a lavoura é dele — a camada técnica é compartilhada');
+  assert.equal(linha.cultivar, 'FS560');
+  assert.equal(linha.marca, 'FS Sementes');
+  assert.equal(linha.lote, '24-0904', 'o lote é a garantia do que ele plantou');
+  assert.equal(Number(linha.produtividade_sc_ha), 68.4);
+});
+
+test('o caderno de outro produtor não entra no dele', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Marli Trevisan' },
+  });
+  const faz = await req('/cadastro/propriedades', {
+    metodo: 'POST', token: tRevenda,
+    corpo: { nome: 'Sítio Trevisan', produtorId: outro.corpo.id, municipio: 'Sinop', uf: 'MT' },
+  });
+  const t = await req(`/cadastro/propriedades/${faz.corpo.id}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Quadra A', areaHa: 90 },
+  });
+  const alheio = await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: { talhaoId: t.corpo.id, safra: '26/27', cultivar: 'NS7709', marca: 'Nidera' },
+  });
+  assert.equal(alheio.status, 201);
+
+  const meu = await req('/caderno/plantios', { token: tProdutor });
+  assert.ok(!meu.corpo.some((p) => p.id === alheio.corpo.id));
+  assert.ok(meu.corpo.every((p) => p.produtor === 'José Cesar Sabo'));
+});
+
+test('ele lê o caderno e não escreve nele — quem fecha o registro é o consultor', async () => {
+  const r = await req('/caderno/plantios', {
+    metodo: 'POST', token: tProdutor,
+    corpo: { talhaoId, safra: '26/27', cultivar: 'FS560', marca: 'FS Sementes' },
+  });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+});
+
+test('o desempenho por cultivar é o da terra dele, não o da revenda', async () => {
+  const dele = await req('/caderno/desempenho', { token: tProdutor });
+  assert.equal(dele.status, 200);
+  assert.deepEqual(dele.corpo.map((d) => d.cultivar), ['FS560'],
+    'a colheita do vizinho não entra na média dele');
+  assert.equal(Number(dele.corpo[0].media_sc_ha), 68.4);
+});
+
+test('o share por marca continua fechado para o portal', async () => {
+  // Desempenho é da lavoura dele; share é leitura comercial da revenda.
+  const r = await req('/caderno/share?safra=26/27', { token: tProdutor });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+});
+
+test('a tela do caderno existe, e não mostra se a semente é nossa', async () => {
+  const js = await (await buscar('/app.js')).text();
+  assert.match(js, /telaCaderno/);
+  assert.match(js, /'#\/caderno'/, 'sem entrada no menu a tela é inalcançável');
+
+  const tela = js.slice(js.indexOf('async function telaCaderno'),
+    js.indexOf('/* ------------------------------------------------------------------ apoio */'));
+  assert.doesNotMatch(tela, /\.nossa/,
+    'marcar a semente como nossa é leitura comercial; não diz nada a quem plantou');
+});
+
+test('data sem hora chega como dia, não como instante em UTC', async () => {
+  // `2026-10-12T00:00:00.000Z` desenhava 11/10 em qualquer fuso a oeste de
+  // Greenwich — um dia antes, em toda data do sistema, e silenciosamente.
+  await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId, safra: '27/28', cultivar: 'FS560', marca: 'FS Sementes',
+      plantadoEm: '2027-10-12',
+    },
+  });
+
+  const meu = await req('/caderno/plantios', { token: tProdutor });
+  const com = meu.corpo.find((p) => p.safra === '27/28');
+  assert.equal(com.plantado_em, '2027-10-12',
+    'dia de plantio é casa no calendário, não instante — não leva fuso junto');
+
+  const comColheita = meu.corpo.find((p) => p.colhido_em);
+  assert.match(comColheita.colhido_em, /^\d{4}-\d{2}-\d{2}$/);
+
+  // O que é instante de verdade continua sendo instante.
+  const visitas = await req('/visitas', { token: tProdutor });
+  if (visitas.corpo.length) assert.match(visitas.corpo[0].em, /T\d{2}:\d{2}/);
 });

@@ -221,11 +221,11 @@ function cartaoNota(n) {
   c.append(l);
 
   if (n.pago_em) {
-    c.append(el('p', 'nota-linha', `Paga em ${new Date(n.pago_em).toLocaleDateString('pt-BR')}`));
+    c.append(el('p', 'nota-linha', `Paga em ${dia(n.pago_em)}`));
   } else {
     if (n.vencimento) {
       c.append(el('p', 'nota-linha',
-        `Vence em ${new Date(n.vencimento).toLocaleDateString('pt-BR')}`));
+        `Vence em ${dia(n.vencimento)}`));
     }
     if (n.linha_digitavel) {
       const b = el('button', 'botao pequeno', 'Copiar boleto');
@@ -341,6 +341,136 @@ const dataHora = (d) => (d
   ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
   : '—');
 
+/* -------------------------------------------------------- caderno de campo */
+
+/**
+ * O caderno de campo do produtor: o que foi plantado na terra dele, e o que
+ * saiu de cada talhão.
+ *
+ * É camada TÉCNICA, e o desenho diz que ela é compartilhada com o agricultor —
+ * a lavoura é dele. A política já resolve isso; aqui é só a tela.
+ *
+ * O que NÃO aparece: `nossa`, que marca se a semente saiu do nosso catálogo. É
+ * leitura comercial, serve ao share por marca, e não diz nada a quem plantou.
+ */
+async function telaCaderno(raiz) {
+  const [plantios, desempenho] = await Promise.all([
+    api('/caderno/plantios'), api('/caderno/desempenho'),
+  ]);
+
+  const area = el('section');
+  area.append(cabecalho('Caderno de campo', 'O que foi plantado na sua terra'));
+
+  if (plantios.length === 0) {
+    area.append(vazio('Nada registrado ainda. O consultor anota o plantio, '
+      + 'e você pode mandar foto do saco ou áudio pelo WhatsApp da revenda.'));
+    raiz.replaceChildren(area);
+    return;
+  }
+
+  // Safra mais recente primeiro. '26/27' ordena como texto neste século, e é
+  // assim que a safra é escrita em todo o resto do sistema.
+  const safras = [...new Set(plantios.map((p) => p.safra))].sort().reverse();
+
+  safras.forEach((safra) => {
+    // Por nome do talhão: o servidor ordena por data de plantio, que numa
+    // mesma safra deixa a lista fora de ordem alfabética — e caderno de campo
+    // se lê talhão a talhão, na ordem em que a pessoa anda na fazenda.
+    const daSafra = plantios.filter((p) => p.safra === safra)
+      .sort((a, b) => String(a.talhao).localeCompare(String(b.talhao), 'pt-BR'));
+    const ha = daSafra.reduce((s, p) => s + Number(p.area_ha ?? 0), 0);
+
+    const c = el('article', 'cartao');
+    const topo = el('div', 'linha');
+    topo.append(el('strong', null, `Safra ${safra}`),
+      el('span', 'id', `${daSafra.length} talhão(ões)`),
+      el('span', 'num', ha ? `${ha.toLocaleString('pt-BR')} ha` : '—'));
+    c.append(topo);
+
+    daSafra.forEach((p) => c.append(linhaDePlantio(p)));
+    area.append(c);
+  });
+
+  if (desempenho.length) area.append(cartaoDesempenho(desempenho));
+  raiz.replaceChildren(area);
+}
+
+function linhaDePlantio(p) {
+  const bloco = el('div', 'plantio');
+
+  const l = el('div', 'linha');
+  l.append(el('span', null, p.talhao),
+    el('span', 'num', p.area_ha ? `${Number(p.area_ha).toLocaleString('pt-BR')} ha` : '—'));
+  bloco.append(l);
+
+  bloco.append(el('p', 'sub', [
+    [p.cultivar, p.marca].filter(Boolean).join(' · '),
+    p.ciclo === 'safrinha' ? 'safrinha' : null,
+    p.plantado_em ? `plantado em ${dia(p.plantado_em)}` : null,
+    p.populacao ? `${Number(p.populacao).toLocaleString('pt-BR')} mil pl/ha` : null,
+    // O lote é o que liga o saco à origem. Para ele é a garantia do que plantou.
+    p.lote ? `lote ${p.lote}` : null,
+  ].filter(Boolean).join(' · ')));
+
+  if (p.produtividade_sc_ha) {
+    const r = el('div', 'linha colhido');
+    r.append(el('span', null, `Colhido ${p.colhido_em ? `em ${dia(p.colhido_em)}` : ''}`.trim()),
+      el('span', 'num grande', `${Number(p.produtividade_sc_ha).toLocaleString('pt-BR')} sc/ha`));
+    bloco.append(r);
+  } else {
+    bloco.append(el('p', 'obs', 'Colheita ainda não registrada.'));
+  }
+  return bloco;
+}
+
+/**
+ * Como cada cultivar foi na terra DELE.
+ *
+ * É a comparação que ele não consegue fazer sozinho — e é o motivo de o app
+ * valer a pena para quem plantou, não só para quem vendeu. Sem safra no filtro:
+ * a média atravessa os anos registrados, e a tela diz isso.
+ */
+function cartaoDesempenho(linhas) {
+  const c = el('article', 'cartao');
+  c.append(el('p', 'rotulo', 'Como cada cultivar foi na sua terra'));
+
+  linhas.forEach((d) => {
+    const l = el('div', 'linha');
+    l.append(el('span', null, [d.cultivar, d.marca].filter(Boolean).join(' · ')),
+      el('span', 'num', `${Number(d.media_sc_ha).toLocaleString('pt-BR')} sc/ha`));
+    c.append(l);
+    if (d.colhidos > 1) {
+      c.append(el('p', 'sub',
+        `${d.colhidos} colheitas · de ${Number(d.pior).toLocaleString('pt-BR')} `
+        + `a ${Number(d.melhor).toLocaleString('pt-BR')} sc/ha`));
+    }
+  });
+
+  c.append(el('p', 'obs',
+    'Média das colheitas registradas, de todas as safras que estão aqui.'));
+  return c;
+}
+
+/**
+ * Uma data na tela.
+ *
+ * Coluna `date` chega como `2026-10-12`, sem hora, e é montada pelas partes:
+ * `new Date('2026-10-12')` é meia-noite em UTC, e a oeste de Greenwich isso
+ * desenha o dia ANTERIOR. Dia de plantio não tem fuso — é uma casa no
+ * calendário, não um instante.
+ *
+ * O que tem hora é instante de verdade e passa pelo fuso, como deve.
+ */
+const dia = (d) => {
+  if (!d) return '—';
+  const s = String(d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [a, m, j] = s.split('-');
+    return `${j}/${m}/${a}`;
+  }
+  return new Date(s).toLocaleDateString('pt-BR');
+};
+
 /* ------------------------------------------------------------------ apoio */
 
 function cabecalho(titulo, sub, voltar) {
@@ -361,7 +491,8 @@ const vazio = (t) => el('p', 'vazio', t);
 
 function barraInferior() {
   const nav = el('nav', 'abas');
-  [['Pedidos', '#/'], ['Lavoura', '#/lavoura'], ['Visitas', '#/visitas'],
+  [['Pedidos', '#/'], ['Lavoura', '#/lavoura'], ['Caderno', '#/caderno'],
+    ['Visitas', '#/visitas'],
     ['Sair', '#sair']].forEach(([nome, destino]) => {
     const b = el('button', location.hash === destino || (destino === '#/' && !location.hash)
       ? 'ativa' : '', nome);
@@ -419,6 +550,7 @@ async function desenhar() {
     if (rota.startsWith('pedido/')) await telaPedido(raiz, rota.slice(7));
     else if (rota === 'lavoura') await telaLavoura(raiz);
     else if (rota === 'visitas') await telaVisitas(raiz);
+    else if (rota === 'caderno') await telaCaderno(raiz);
     else await telaPedidos(raiz);
     $('#rodape').replaceChildren(barraInferior());
   } catch (e) {

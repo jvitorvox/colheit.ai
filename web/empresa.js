@@ -14,7 +14,25 @@ const el = (t, cls, txt) => {
 const num = (n) => Number(n ?? 0).toLocaleString('pt-BR');
 const brl = (n) => Number(n ?? 0).toLocaleString('pt-BR',
   { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
-const dia = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
+/**
+ * Uma data na tela.
+ *
+ * Coluna `date` chega como `2026-10-12`, sem hora, e é montada pelas partes:
+ * `new Date('2026-10-12')` é meia-noite em UTC, e a oeste de Greenwich isso
+ * desenha o dia ANTERIOR — vencimento de nota, emissão, vigência de preço,
+ * todos um dia antes para qualquer usuário brasileiro, e silenciosamente.
+ *
+ * O que tem hora é instante de verdade e passa pelo fuso, como deve.
+ */
+const dia = (d) => {
+  if (!d) return '—';
+  const s = String(d);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [a, m, j] = s.split('-');
+    return `${j}/${m}/${a}`;
+  }
+  return new Date(s).toLocaleDateString('pt-BR');
+};
 
 const estado = { token: localStorage.getItem(SESSAO), eu: null, aba: 'painel', safra: null };
 

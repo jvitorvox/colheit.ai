@@ -8,7 +8,7 @@
 // Virar a versão APAGA a casca e os dados guardados, e é obrigatório sempre que
 // `/app.js` ou `/base.css` mudam: a casca é servida cache-primeiro, então sem
 // isto o produtor continuaria abrindo a versão velha do portal para sempre.
-const VERSAO = 'v2';
+const VERSAO = 'v3';
 const CASCA = `casca-${VERSAO}`;
 const DADOS = `dados-${VERSAO}`;
 
@@ -84,7 +84,8 @@ self.addEventListener('fetch', (ev) => {
 // `/midia` fica FORA desta lista de propósito: a volta pelo cache desserializa
 // a resposta como JSON, e foto não é JSON. Ela cai no ramo da casca, que é
 // cache-primeiro — e está certo, porque mídia é imutável pelo id.
-const ehApi = (p) => ['/auth/', '/pedidos', '/cadastro/', '/push/', '/captura/', '/visitas']
+const ehApi = (p) => ['/auth/', '/pedidos', '/cadastro/', '/push/', '/captura/',
+  '/visitas', '/caderno']
   .some((raiz) => p.startsWith(raiz));
 
 /* ------------------------------------------------------------------ push */

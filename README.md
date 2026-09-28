@@ -51,6 +51,18 @@ select app.aplicar_isolamento('minha_tabela');   -- não esquecer
 
 E o teste de isolamento roda no CI a cada migração nova — não é conferência manual.
 
+### Coluna `date` volta como texto
+
+`pg.types.setTypeParser(1082, v => v)` em `db.js`. Sem isso, `plantado_em` de
+12/10 virava `2026-10-12T00:00:00.000Z` no JSON e o navegador em Cuiabá (UTC-4)
+desenhava **11/10** — um dia antes, em toda data do sistema: plantio, colheita,
+vencimento de nota, vigência de preço. Errado para todo usuário brasileiro, e
+silencioso, porque a data está quase certa.
+
+Dia sem hora não tem fuso: não é um instante, é uma casa no calendário. O `dia()`
+das telas monta pelas partes quando recebe `2026-10-12`, e só converte pelo fuso
+o que traz hora. Há teste para os dois lados.
+
 ## Estrutura
 
 ```
@@ -338,17 +350,37 @@ web/sw.js        cache da casca e recebimento do push
 web/manifest.json
 ```
 
-### Quatro telas
+### Cinco telas
 
 **Entrar** — telefone e código, sem senha. **Meus pedidos** — progresso compacto por
 cartão; dez etiquetas em 314px de celular ficam ilegíveis e obrigam a arrastar de
 lado para ver o que ele quer saber. **Detalhe** — aí sim a faixa completa das dez
 etapas, mais nota, boleto e histórico. **Minha lavoura** — a terra e os talhões.
-**Visitas** — quem esteve na lavoura dele, de todas as revendas, com as fotos do
-talhão.
+**Caderno de campo** — o que foi plantado em cada talhão, por safra, e o que
+saiu na colheita. **Visitas** — quem esteve na lavoura dele, de todas as
+revendas, com as fotos do talhão.
 
 Na etapa 6 aparece o **Dia Zero**: entre saber que a carga saiu e ela chegar, é a
 janela para acertar máquina, equipe e regulagem.
+
+### O caderno é dele, e é o que faz o app valer a pena para quem planta
+
+A camada técnica é compartilhada com o agricultor — a política de `plantio` já
+dizia isso desde a 022, e faltava a tela. Por safra, talhão a talhão: cultivar,
+marca, área, população, data de plantio, **lote** (a garantia do que ele plantou)
+e a produtividade quando a colheita entra.
+
+No fim, **como cada cultivar foi na terra dele** — média, pior e melhor das
+colheitas registradas. É a comparação que ele não consegue fazer sozinho, e o
+motivo de o aplicativo valer a pena para quem plantou, não só para quem vendeu.
+
+O que **não** aparece: `nossa`, a marca de que a semente saiu do nosso catálogo.
+É leitura comercial, serve ao share por marca, e não diz nada a quem plantou. O
+`/caderno/share` continua fechado ao portal pelo mesmo motivo.
+
+Ele **lê e não escreve** — quem fecha o registro é o consultor, e a política já
+exige sessão de empresa. O caminho dele para contribuir é o WhatsApp: foto do
+saco, áudio do plantio, e o consultor valida. A tela vazia diz exatamente isso.
 
 ### Ele não sabe quem consulta, mas sabe quem entrou na porteira
 

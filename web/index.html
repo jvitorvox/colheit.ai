@@ -35,9 +35,18 @@ body{padding:0 0 calc(74px + env(safe-area-inset-bottom))}
 
 .abas{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--papel);
   border-top:1px solid var(--linha);padding-bottom:env(safe-area-inset-bottom);z-index:5}
-.abas button{flex:1;border:none;background:none;padding:15px 6px;font-size:.875rem;
-  color:var(--tinta-3)}
+/* Cinco abas em 375px dão 75px cada. O nome não pode quebrar em duas linhas nem
+   sumir com reticências, então a fonte cede antes do espaço. */
+.abas button{flex:1;min-width:0;border:none;background:none;padding:15px 2px;
+  font-size:.8125rem;color:var(--tinta-3);white-space:nowrap}
 .abas button.ativa{color:var(--marca);font-weight:600}
+
+/* Um plantio dentro do cartão da safra. A régua à esquerda liga as linhas do
+   mesmo talhão sem precisar de mais um cartão dentro do cartão. */
+.plantio{border-left:2px solid var(--linha);padding-left:11px;margin:9px 0 2px}
+.plantio+.plantio{margin-top:14px}
+.linha.colhido{border-top:1px dashed var(--linha);margin-top:5px}
+.linha.colhido .num.grande{color:var(--marca)}
 
 #sem-rede{position:sticky;top:0;z-index:4;background:var(--sol-suave);
   border-bottom:1px solid var(--sol);color:var(--sol-tinta);
