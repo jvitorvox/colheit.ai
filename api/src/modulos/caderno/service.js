@@ -196,6 +196,7 @@ export function resultadoDaSafra(ctx, safra, produtorId) {
       porTalhao: talhoes.map((t) => ({
         plantioId: t.plantio_id,
         talhao: t.talhao,
+        produtor: t.produtor,
         cultivar: t.cultivar,
         marca: t.marca,
         areaHa: Number(t.area_ha ?? 0),
@@ -243,8 +244,14 @@ export function resultadoPorOrigem(ctx, safra) {
       diferencaScHa: nossa.mediaPonderadaScHa !== null && demais.mediaPonderadaScHa !== null
         ? Number((nossa.mediaPonderadaScHa - demais.mediaPonderadaScHa).toFixed(1))
         : null,
+      // Duas ressalvas, e a segunda é de definição, não de método: "nossa" é o
+      // que estava no catálogo de quem REGISTROU o plantio. Para a revenda isso
+      // é o catálogo dela; para o franqueado, que lê a mesma linha descendo do
+      // território, é o catálogo de quem vendeu. Sem dizer isso, os dois leem a
+      // mesma palavra querendo dizer coisas diferentes.
       base: 'não é ensaio comparativo — são lavouras diferentes, '
-        + 'em solos, datas e manejos diferentes',
+        + 'em solos, datas e manejos diferentes. "Nossa" é o que estava no '
+        + 'catálogo de quem registrou o plantio',
     };
   });
 }

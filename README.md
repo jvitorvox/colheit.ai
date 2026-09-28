@@ -935,6 +935,32 @@ painel escolhe o que cabe na abertura e leva as frases junto.
 
 Sem talhão plantado o cartão não aparece, em vez de mostrar `0 sc/ha` — número
 que parece resultado ruim quando é ausência de registro.
+### O mesmo painel serve ao franqueado
+
+Ele não tem carteira, não tem fila de visita e não tem funil: enxerga a cadeia
+que desce do território dele, e só. O painel serve a ele **sem um `if` de papel
+em lugar nenhum** — o bloco sem dado vem `null` e a tela não o desenha.
+
+> Zero não é o mesmo que ausência. "0 produtores atrasados" descreve um problema
+> que não existe; a ausência descreve o negócio dele. Vale igual para a revenda
+> no primeiro dia.
+
+E a regra olha o **dado**, não o tipo do tenant. Um `if` de papel aqui seria uma
+segunda regra de visibilidade para manter em dia com a política — que é
+justamente o que este módulo evita.
+
+**Quanto do território passou por terceiro** é o número dele, e é o que ele não
+descobre de outro jeito: ele não operou aquela venda, enxerga porque o pedido
+carimbou o município. `pedido.canal` já existia na criação, mas só para achar o
+preço, e então se perdia — agora fica carimbado, como `franqueado_id` e
+`municipio`, e pelo mesmo motivo.
+
+O melhor e o pior talhão vêm com o **nome da fazenda**: "Gleba 1" é o nome de
+talhão mais comum do país, e num painel com várias o melhor e o pior sairiam
+como a mesma linha. A 030 abre a relação produtor↔propriedade pela mesma porta
+das outras — o pedido que carimbou o território —, e não revela nada novo: o
+próprio pedido que ele lê já traz os dois lados na mesma linha.
+
 
 ## Caderno de campo — e o share por marca
 

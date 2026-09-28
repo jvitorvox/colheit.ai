@@ -39,7 +39,8 @@ export async function criar(ctx, corpo) {
       if (municipio && uf) franqueadoId = await repo.franqueadoDoMunicipio(cx, municipio, uf);
     }
 
-    const id = await repo.criar(cx, { produtorId, propriedadeId, numero, safra, franqueadoId, municipio, uf });
+    const id = await repo.criar(cx,
+      { produtorId, propriedadeId, numero, safra, franqueadoId, municipio, uf, canal });
     await repo.adicionarItens(cx, id, itens);
     await repo.registrarEtapa(cx, id, 1, 'pedido aberto');
     return repo.buscar(cx, id);
@@ -352,5 +353,33 @@ export function marcarPreparo(ctx, pedidoId, item, feito) {
     if (!(await repo.buscar(cx, pedidoId))) throw new NaoEncontrado('pedido');
     await repo.marcarPreparo(cx, pedidoId, item, Boolean(feito));
     return montarPreparo(cx, pedidoId);
+  });
+}
+
+/** O volume por canal — direto e pela distribuidora. */
+export function vendaPorCanal(ctx, safra) {
+  return comContexto(ctx, async (cx) => {
+    const linhas = await repo.vendaPorCanal(cx, safra ?? null);
+    const lado = (canal) => {
+      const l = linhas.find((x) => x.canal === canal);
+      return {
+        pedidos: l?.pedidos ?? 0,
+        produtores: l?.produtores ?? 0,
+        quantidadeSc: Number(l?.quantidade ?? 0),
+        bonificadaSc: Number(l?.bonificada ?? 0),
+        receita: Number(l?.receita ?? 0),
+      };
+    };
+    const direto = lado('direto');
+    const canal = lado('distribuidor');
+    const total = direto.quantidadeSc + canal.quantidadeSc;
+    return {
+      direto,
+      canal,
+      // Quanto do território passou por terceiro. É o número do franqueado.
+      pelaDistribuidoraPct: total > 0
+        ? Number((canal.quantidadeSc / total * 100).toFixed(1))
+        : null,
+    };
   });
 }

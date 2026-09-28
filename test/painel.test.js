@@ -8,6 +8,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { dono, encerrar } from '../api/src/db.js';
+import { comContexto } from '../api/src/contexto.js';
 import { migrar } from '../api/src/migrar.js';
 import { safraDoCalendario } from '../api/src/modulos/painel/service.js';
 import { DIAS_PARADO_DEMAIS } from '../api/src/modulos/pedidos/service.js';
@@ -235,9 +236,13 @@ test('gestor e consultor recebem a mesma resposta; o conteúdo é que muda', asy
 test('o painel de uma empresa não enxerga a outra', async () => {
   const r = (await painel(tOutra)).corpo;
   assert.equal(r.venda.quantidadeSc, 0);
-  assert.equal(r.operacao.emAndamento, 0);
-  assert.equal(r.carteira.produtores, 0);
-  assert.equal(r.campo.naFila, 0);
+  // Bloco sem dado vem AUSENTE, não zerado: "0 produtores atrasados" descreve
+  // um problema que não existe, em vez de descrever a falta de carteira.
+  assert.equal(r.operacao, null);
+  assert.equal(r.carteira, null);
+  assert.equal(r.campo, null);
+  assert.equal(r.funil, null);
+  assert.equal(r.mercado, null);
 });
 
 /* ---------------------------------------------- o fechamento da safra */
@@ -299,4 +304,83 @@ test('a leitura comercial da safra é só da empresa', async () => {
 test('safra sem colheita nenhuma não inventa fechamento', async () => {
   const r = await painel(tOutra);
   assert.equal(r.corpo.resultado, null, 'sem plantio registrado, não há safra a fechar');
+});
+
+/* ------------------------------------------------ o painel do franqueado */
+
+let tFranqueado;
+
+test('o franqueado enxerga a safra que desceu do território dele', async () => {
+  const fq = await criarTenant('FS Sementes', '44444444000144', 'franqueado');
+  await criarUsuario(fq, 'Chefe', 'chefe@fs.com', 'gestor');
+  tFranqueado = await entrar(req, 'chefe@fs.com');
+
+  // Sorriso é dele — é daí que sai o carimbo do pedido.
+  await dono.query(
+    'insert into territorio (municipio, uf, franqueado_id) values ($1,$2,$3)',
+    ['Sorriso', 'MT', fq]);
+
+  const ped = await req('/pedidos', {
+    metodo: 'POST', token: tGestor,
+    corpo: {
+      numero: 'PED-FQ-1', safra: SAFRA, produtorId, propriedadeId, canal: 'distribuidor',
+      itens: [{ cultivar: 'FS560', quantidade: 400, precoUnit: 300 }],
+    },
+  });
+  assert.equal(ped.status, 201, JSON.stringify(ped.corpo));
+
+  const p = (await painel(tFranqueado)).corpo;
+  assert.equal(p.venda.quantidadeSc, 400, 'só o que carimbou o território dele');
+  assert.ok(p.resultado, 'e a safra dos talhões que ele alcança pelo pedido');
+  assert.ok(p.resultado.mediaPonderadaScHa > 0);
+});
+
+test('o painel do franqueado não mostra o que ele não tem', async () => {
+  const p = (await painel(tFranqueado)).corpo;
+  // Ele não opera venda, não tem carteira, não visita e não prospecta. Zeros
+  // ali descreveriam um problema; a ausência descreve o negócio dele.
+  assert.equal(p.carteira, null);
+  assert.equal(p.campo, null);
+  assert.equal(p.funil, null);
+});
+
+test('quanto do território passou por terceiro é o número dele', async () => {
+  const p = (await painel(tFranqueado)).corpo;
+  assert.equal(p.venda.porCanal.canal.quantidadeSc, 400);
+  assert.equal(p.venda.porCanal.direto.quantidadeSc, 0);
+  assert.equal(p.venda.porCanal.pelaDistribuidoraPct, 100,
+    'ele não operou essa venda — é a única forma de saber que ela existiu');
+});
+
+test('o carimbo do canal não se recalcula, como o do território', async () => {
+  const { rows } = await dono.query(
+    "select canal from pedido where numero = 'PED-FQ-1'");
+  assert.equal(rows[0].canal, 'distribuidor');
+  const antigos = await dono.query(
+    "select count(*)::int as n from pedido where numero like 'PED-00%' and canal <> 'direto'");
+  assert.equal(antigos.rows[0].n, 0, 'pedido anterior à migração fica direto, sem inventar');
+});
+
+test('um franqueado não enxerga o território do outro', async () => {
+  const outroFq = await criarTenant('Outra Marca', '55555555000155', 'franqueado');
+  await criarUsuario(outroFq, 'Chefe 2', 'chefe2@outra.com', 'gestor');
+  const t2 = await entrar(req, 'chefe2@outra.com');
+  const p = (await painel(t2)).corpo;
+  assert.equal(p.venda.quantidadeSc, 0);
+  assert.equal(p.resultado, null, 'sem território, não desce nada');
+});
+
+test('o melhor e o pior talhão vêm com o nome da fazenda', async () => {
+  // "Gleba 1" é o nome de talhão mais comum do país: sem o produtor, os dois
+  // extremos de um painel com várias fazendas saem como a mesma linha.
+  const p = (await painel(tFranqueado)).corpo;
+  assert.ok(p.resultado.melhores[0].produtor,
+    'ele alcança de quem é a terra pelos pedidos que carimbam o território dele');
+
+  const outroFq = (await dono.query(
+    "select id from tenant where documento = '55555555000155'")).rows[0].id;
+  const vistos = await comContexto({ tenant: outroFq }, (cx) =>
+    cx.query('select count(*)::int as n from produtor_propriedade')
+      .then((r) => r.rows[0].n));
+  assert.equal(vistos, 0, 'franqueado sem pedido naquela terra não alcança o vínculo');
 });

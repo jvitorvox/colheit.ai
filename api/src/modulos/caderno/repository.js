@@ -156,9 +156,16 @@ export async function talhoesDaSafra(cx, safra, produtorId) {
   const { rows } = await cx.query(`
     select pl.id as plantio_id, t.nome as talhao, pl.cultivar, pl.marca,
            coalesce(pl.area_ha, t.area_ha) as area_ha,
-           c.produtividade_sc_ha as sc_ha, c.colhido_em, c.umidade
+           c.produtividade_sc_ha as sc_ha, c.colhido_em, c.umidade,
+           -- Quem é o dono do talhão. "Gleba 1" é o nome mais comum do país:
+           -- sem o produtor, o melhor e o pior talhão de um painel com várias
+           -- fazendas viram duas linhas iguais.
+           p.nome as produtor
       from plantio pl
       join talhao t on t.id = pl.talhao_id
+      left join produtor_propriedade pp
+             on pp.propriedade_id = t.propriedade_id and pp.fim is null
+      left join produtor p on p.id = pp.produtor_id
       left join colheita c on c.plantio_id = pl.id
      where pl.safra = $1
        and ($2::uuid is null or exists (

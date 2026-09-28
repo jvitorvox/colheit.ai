@@ -53,11 +53,12 @@ export async function montar(ctx, { safra } = {}) {
 
   // Em paralelo: são leituras independentes, e o gestor abre esta tela toda
   // manhã. Em série seriam sete idas ao banco enfileiradas por nada.
-  const [lista, gargalo, venda, oportunidades, penetracao, share, fila, aValidar,
+  const [lista, gargalo, porCanal, venda, oportunidades, penetracao, share, fila, aValidar,
     resultado, porOrigem] =
     await Promise.all([
       pedidos.listar(ctx, { situacao: 'andamento' }),
       pedidos.gargalo(ctx),
+      pedidos.vendaPorCanal(ctx, escolhida),
       catalogo.resumoDeVenda(ctx, escolhida),
       funil.resumo(ctx, escolhida),
       funil.penetracao(ctx, { safra: escolhida }),
@@ -68,15 +69,29 @@ export async function montar(ctx, { safra } = {}) {
       caderno.resultadoPorOrigem(ctx, escolhida),
     ]);
 
+  // Bloco vazio vira AUSÊNCIA, não uma fileira de zeros.
+  //
+  // Quem lê isto primeiro é o franqueado: ele não tem carteira, não tem fila de
+  // visita e não tem funil — enxerga a cadeia que desce do território dele, e
+  // só. Um painel mostrando "0 produtores atrasados" e "0 oportunidades" não
+  // estaria descrevendo o negócio dele, estaria descrevendo um erro que não
+  // existe. Vale igual para a revenda no primeiro dia.
+  //
+  // E repare que a regra não olha o TIPO do tenant: olha se há dado. Um `if` de
+  // papel aqui seria uma segunda regra de visibilidade para manter em dia com a
+  // política, que é justamente o que o resto deste módulo evita.
+  const seTiver = (n, bloco) => (n > 0 ? bloco : null);
+
   return {
     safra: escolhida,
     safraVeioDe: safra ? 'pedida' : (daVenda ? 'última venda' : 'calendário'),
-    venda: resumirVenda(venda),
-    operacao: { emAndamento: lista.length, ...gargalo },
-    carteira: resumirCarteira(penetracao),
-    campo: resumirCampo(fila, aValidar),
-    mercado: resumirShare(share),
-    funil: resumirFunil(oportunidades),
+    venda: resumirVenda(venda, porCanal),
+    operacao: seTiver(lista.length, { emAndamento: lista.length, ...gargalo }),
+    carteira: seTiver(penetracao.linhas.length, resumirCarteira(penetracao)),
+    campo: seTiver(fila.length, resumirCampo(fila, aValidar)),
+    mercado: seTiver(share.marcas.length, resumirShare(share)),
+    funil: seTiver(oportunidades.reduce((s, e) => s + e.quantas, 0),
+      resumirFunil(oportunidades)),
     resultado: resumirResultado(resultado, porOrigem),
   };
 }
@@ -122,7 +137,7 @@ function resumirResultado(r, porOrigem) {
  * só o volume faria a safra parecer maior do que a venda foi, e é justamente o
  * cuidado que o catálogo já toma: aqui ele é repetido em vez de esquecido.
  */
-function resumirVenda(linhas) {
+function resumirVenda(linhas, porCanal) {
   const soma = (campo) => linhas.reduce((s, l) => s + Number(l[campo] ?? 0), 0);
   const quantidade = soma('quantidade');
   const bonificada = soma('bonificada');
@@ -140,6 +155,10 @@ function resumirVenda(linhas) {
     topo: linhas.slice(0, DESTAQUES).map((l) => ({
       produto: l.produto, quantidadeSc: l.quantidade, bonificadaSc: l.bonificada,
     })),
+    // Direto e pela distribuidora. Para a revenda é curiosidade; para o
+    // franqueado é o negócio dele — quanto do território dele passou por
+    // terceiro é a única coisa que ele não descobre de outro jeito.
+    porCanal,
   };
 }
 

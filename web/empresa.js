@@ -209,6 +209,10 @@ async function telaPainel(main) {
     `safra ${p.safra} · ${estado.eu.tenant}`
     + (p.safraVeioDe === 'calendário' ? ' · nenhuma venda registrada ainda' : '')));
 
+  // A API devolve `null` no bloco que não tem dado, e a tela não o desenha. É
+  // o que faz o mesmo painel servir ao franqueado, que não tem carteira nem
+  // fila de visita: ele vê a cadeia que desceu do território dele, e não uma
+  // fileira de zeros descrevendo problemas que não existem.
   const n = el('div', 'numeros');
   n.append(
     numeroCartao('Volume da safra', `${num(p.venda.quantidadeSc)} sc`,
@@ -217,18 +221,28 @@ async function telaPainel(main) {
         : 'sem bonificada'),
     numeroCartao('Receita', brl(p.venda.receita),
       p.venda.precoMedioEfetivo ? `${brl(p.venda.precoMedioEfetivo)}/sc efetivo` : null),
-    numeroCartao('Pedidos em andamento', num(p.operacao.emAndamento),
-      p.operacao.pior ? `${p.operacao.pior.nome} está travando` : 'nada travado'),
-    numeroCartao('Do campo, a validar', num(p.campo.relatosAValidar),
-      p.campo.relatosAValidar ? 'esperando o consultor' : 'nada na fila'),
   );
+  if (p.venda.porCanal?.pelaDistribuidoraPct !== null) {
+    n.append(numeroCartao('Pela distribuidora',
+      `${num(p.venda.porCanal.pelaDistribuidoraPct)}%`,
+      `${num(p.venda.porCanal.canal.quantidadeSc)} sc em `
+      + `${p.venda.porCanal.canal.pedidos} pedido(s)`));
+  }
+  if (p.operacao) {
+    n.append(numeroCartao('Pedidos em andamento', num(p.operacao.emAndamento),
+      p.operacao.pior ? `${p.operacao.pior.nome} está travando` : 'nada travado'));
+  }
+  if (p.campo) {
+    n.append(numeroCartao('Do campo, a validar', num(p.campo.relatosAValidar),
+      p.campo.relatosAValidar ? 'esperando o consultor' : 'nada na fila'));
+  }
   main.append(n);
 
-  main.append(cartaoGargalo(p.operacao));
+  if (p.operacao) main.append(cartaoGargalo(p.operacao));
   if (p.resultado) main.append(cartaoResultado(p.resultado));
-  main.append(cartaoCampo(p.campo));
-  main.append(cartaoCarteira(p.carteira));
-  main.append(cartaoMercado(p.mercado));
+  if (p.campo) main.append(cartaoCampo(p.campo));
+  if (p.carteira) main.append(cartaoCarteira(p.carteira));
+  if (p.mercado) main.append(cartaoMercado(p.mercado));
 }
 
 /** Onde a operação está parada — por tempo, não por contagem. */
@@ -320,17 +334,16 @@ function cartaoResultado(r) {
       + `${o.base.charAt(0).toUpperCase()}${o.base.slice(1)}.`));
   }
 
-  // Quem fugiu da média, para os dois lados: é onde há decisão a tomar.
-  const extremos = el('div', 'linha');
-  extremos.append(el('span', 'id', 'Melhor'),
-    el('span', null, `${r.melhores[0].talhao} · ${num(r.melhores[0].produtividadeScHa)} sc/ha`
-      + (r.melhores[0].cultivar ? ` · ${r.melhores[0].cultivar}` : '')));
-  c.append(extremos);
-  const pior = el('div', 'linha');
-  pior.append(el('span', 'id', 'Pior'),
-    el('span', null, `${r.piores[0].talhao} · ${num(r.piores[0].produtividadeScHa)} sc/ha`
-      + (r.piores[0].cultivar ? ` · ${r.piores[0].cultivar}` : '')));
-  c.append(pior);
+  // Quem fugiu da média, para os dois lados: é onde há decisão a tomar. O nome
+  // do produtor vem junto porque "Gleba 1" é o nome mais comum do país — e num
+  // painel com várias fazendas os dois extremos sairiam iguais.
+  const extremo = (t) => [t.produtor, t.talhao, `${num(t.produtividadeScHa)} sc/ha`, t.cultivar]
+    .filter(Boolean).join(' · ');
+  [['Melhor', r.melhores[0]], ['Pior', r.piores[0]]].filter(([, t]) => t).forEach(([rot, t]) => {
+    const l = el('div', 'linha');
+    l.append(el('span', 'id', rot), el('span', null, extremo(t)));
+    c.append(l);
+  });
   return c;
 }
 

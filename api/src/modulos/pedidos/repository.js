@@ -21,10 +21,11 @@ export async function localDaPropriedade(cx, propriedadeId) {
 export async function criar(cx, p) {
   const { rows } = await cx.query(`
     insert into pedido (tenant_id, produtor_id, propriedade_id, numero, safra,
-                        franqueado_id, municipio, uf)
-    values (app.tenant_atual(), $1, $2, $3, $4, $5, $6, $7)
+                        franqueado_id, municipio, uf, canal)
+    values (app.tenant_atual(), $1, $2, $3, $4, $5, $6, $7, $8)
     returning id`,
-    [p.produtorId, p.propriedadeId, p.numero, p.safra, p.franqueadoId, p.municipio, p.uf]);
+  [p.produtorId, p.propriedadeId, p.numero, p.safra, p.franqueadoId, p.municipio, p.uf,
+    p.canal]);
   return rows[0].id;
 }
 
@@ -41,7 +42,7 @@ export async function adicionarItens(cx, pedidoId, itens) {
 
 export async function buscar(cx, id) {
   const { rows } = await cx.query(`
-    select p.id, p.numero, p.safra, p.etapa, p.situacao, p.credito,
+    select p.id, p.numero, p.safra, p.etapa, p.situacao, p.credito, p.canal,
            p.produtor_id, p.propriedade_id, p.tenant_id, p.franqueado_id,
            p.municipio, p.uf, p.criado_em,
            e.nome as etapa_nome, e.quem as etapa_quem, e.faixa as etapa_faixa,
@@ -64,7 +65,7 @@ export async function buscar(cx, id) {
 
 export async function listar(cx, { produtorId, situacao } = {}) {
   const { rows } = await cx.query(`
-    select p.id, p.numero, p.safra, p.etapa, p.situacao, p.credito,
+    select p.id, p.numero, p.safra, p.etapa, p.situacao, p.credito, p.canal,
            e.nome as etapa_nome, pr.nome as produtor, p.municipio, p.uf, p.criado_em
       from pedido p
       join etapa_pedido e on e.numero = p.etapa
@@ -177,4 +178,30 @@ export async function marcarPreparo(cx, pedidoId, item, feito) {
     on conflict (pedido_id, item) do update
       set feito_em = case when $3 then coalesce(preparo_pedido.feito_em, now()) else null end`,
   [pedidoId, item, feito]);
+}
+
+/**
+ * O volume da safra separado por canal: venda direta e venda pela distribuidora.
+ *
+ * Para a revenda é curiosidade; para o FRANQUEADO é o negócio dele. Ele não
+ * opera a venda que a distribuidora fez — enxerga porque o pedido carimbou o
+ * município dele —, e essa separação é a única forma de ele saber quanto do
+ * território dele passou por terceiro.
+ */
+export async function vendaPorCanal(cx, safra) {
+  const { rows } = await cx.query(`
+    select p.canal,
+           count(distinct p.id)::int                                   as pedidos,
+           count(distinct p.produtor_id)::int                          as produtores,
+           coalesce(sum(i.quantidade), 0)                              as quantidade,
+           coalesce(sum(i.quantidade) filter (where i.bonificada), 0)   as bonificada,
+           coalesce(sum(i.quantidade * coalesce(i.preco_unit, 0))
+                    filter (where not i.bonificada), 0)                as receita
+      from pedido p
+      join pedido_item i on i.pedido_id = p.id
+     where p.situacao <> 'cancelado'
+       and ($1::text is null or p.safra = $1)
+     group by p.canal
+     order by p.canal`, [safra ?? null]);
+  return rows;
 }
