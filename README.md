@@ -776,6 +776,31 @@ A aba fica **fora do caminho da visita**, de propósito: a tela de registro é
 medida pela H1 e tem de caber em 60 segundos. Enfiar o histórico da safra nela
 seria derrubar a hipótese para ganhar contexto.
 
+### E a vizinhança, que é o que abre a conversa
+
+```
+Safra 26/27                                            fechada
+68,4 sc/ha
++16,5% sobre a safra 25/26
++12,9% em relação a 6 outros produtores de Sorriso que estão aqui
+Média de 6 outros produtores, ponderada pela área — sem nome e
+sem número individual.
+```
+
+"O senhor fez treze por cento acima da região" diz mais do que qualquer número
+sozinho — e a frase da base vai junto porque **é ele quem vai repetir o número ao
+produtor**. Sem ela, "a região" vira "o município", que não é.
+
+A região chega na **mesma ida** que a safra, e fica guardada com ela: perder o
+sinal no meio do talhão não apaga o número que ele levou até lá.
+
+> **Aqui a exclusão é do produtor consultado, não da carteira dele.**
+>
+> No painel do gestor a região inclui a carteira, porque ele a controla e a
+> exclusão viraria alavanca de diferenciação. O consultor não controla quem mais
+> planta em Sorriso: a exclusão é só o produtor da tela, que é a mesma regra do
+> portal. Mexer na carteira não move a régua de ninguém — há teste para isso.
+
 ### A fila de saída passou a carregar dois tipos
 
 Uma fila só, ordenada por tempo: visita e colheita do mesmo dia saem na ordem em

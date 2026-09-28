@@ -400,3 +400,73 @@ test('a leitura comercial da safra não abre para o app do consultor por engano'
   const doPortal = await req('/caderno/resultado?safra=26/27', { token: tConsultor });
   assert.equal(doPortal.corpo.porOrigem, undefined);
 });
+
+/* --------------------------------------- o benchmark que ele leva à porteira */
+
+test('o consultor lê a região do produtor que vai visitar', async () => {
+  const gestor = await entrar(req, 'gestora@norte.com');
+  const prop = (await req('/cadastro/propriedades', { token: gestor })).corpo
+    .find((x) => x.operadores?.some((o) => o.produtorId === produtorId))
+    ?? (await req('/cadastro/propriedades', { token: gestor })).corpo[0];
+
+  // Cinco vizinhos no mesmo município, para o piso fechar.
+  for (let i = 1; i <= 5; i++) {
+    const p = await req('/cadastro/produtores', {
+      metodo: 'POST', token: gestor, corpo: { nome: `Vizinho ${i}` },
+    });
+    const f = await req('/cadastro/propriedades', {
+      metodo: 'POST', token: gestor,
+      corpo: {
+        nome: `Fazenda Vizinho ${i}`, produtorId: p.corpo.id,
+        municipio: prop.municipio, uf: prop.uf, areaHa: 400,
+      },
+    });
+    const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+      metodo: 'POST', token: gestor, corpo: { nome: 'Gleba única', areaHa: 400 },
+    });
+    const pl = await req('/caderno/plantios', {
+      metodo: 'POST', token: gestor,
+      corpo: {
+        talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS560',
+        marca: 'FS Sementes', areaHa: 400,
+      },
+    });
+    await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+      metodo: 'POST', token: gestor,
+      corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 55 + i },
+    });
+  }
+
+  const r = await req(`/caderno/benchmark?produtorId=${produtorId}`, { token: tConsultor });
+  assert.equal(r.status, 200);
+  assert.ok(r.corpo, 'ele leva o número da vizinhança para a conversa');
+  assert.equal(r.corpo.produtores, 5);
+  assert.match(r.corpo.base, /sem nome e sem número individual/);
+});
+
+test('a carteira do consultor não é alavanca — a exclusão é do produtor, não dele', async () => {
+  // No benchmark do gestor a região INCLUI a carteira, porque ele a controla.
+  // Aqui a exclusão é só o produtor consultado, que ele não escolhe: mudar a
+  // carteira não move o número de ninguém.
+  const antes = (await req(`/caderno/benchmark?produtorId=${produtorId}`,
+    { token: tConsultor })).corpo.mediaPonderadaScHa;
+
+  const gestor = await entrar(req, 'gestora@norte.com');
+  const novo = await req('/cadastro/produtores', {
+    metodo: 'POST', token: gestor, corpo: { nome: 'Entrou na carteira' },
+  });
+  assert.equal(novo.status, 201);
+
+  const depois = (await req(`/caderno/benchmark?produtorId=${produtorId}`,
+    { token: tConsultor })).corpo.mediaPonderadaScHa;
+  assert.equal(depois, antes, 'mexer na carteira não move a régua do produtor');
+});
+
+test('produtor fora do alcance dele não tem benchmark', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tOutraRevenda, corpo: { nome: 'De outra revenda' },
+  });
+  const r = await req(`/caderno/benchmark?produtorId=${outro.corpo.id}`, { token: tConsultor });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo, null, 'a política filtra antes do parâmetro');
+});

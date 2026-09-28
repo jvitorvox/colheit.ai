@@ -554,13 +554,22 @@ async function telaSafra(app) {
   // sinal no meio do talhão apagava a tela inteira — e é justamente ali que ele
   // precisa do número para conversar com o produtor.
   const chave = alvo?.produtor_id ?? 'carteira';
-  let dados = estado.safraLida[chave] ?? null;
+  const guardado = estado.safraLida[chave] ?? {};
+  let dados = guardado.safra ?? null;
+  let regiao = guardado.regiao ?? null;
   let velho = Boolean(dados);
   try {
-    const r = await api(`/caderno/resultado${alvo ? `?produtorId=${alvo.produtor_id}` : ''}`);
+    const filtro = alvo ? `?produtorId=${alvo.produtor_id}` : '';
+    // A região vem junto, na mesma ida: é ela que abre a conversa na porteira,
+    // e buscá-la depois faria a linha aparecer com a tela já montada.
+    const [r, b] = await Promise.all([
+      api(`/caderno/resultado${filtro}`),
+      alvo ? api(`/caderno/benchmark${filtro}`).catch(() => ({ dados: null })) : null,
+    ]);
     dados = r.dados;
+    regiao = b?.dados ?? null;
     velho = r.doCache;
-    estado.safraLida[chave] = dados;
+    estado.safraLida[chave] = { safra: dados, regiao };
   } catch {
     if (!dados) {
       app.append(el('p', 'vazio', 'Não consegui trazer a safra, e não tenho cópia guardada.'));
@@ -577,7 +586,7 @@ async function telaSafra(app) {
       'Números da última vez que houve sinal — podem ter mudado.'));
   }
 
-  app.append(cartaoSafra(dados));
+  app.append(cartaoSafra(dados, regiao));
 
   if (!alvo) {
     // Sem produtor escolhido, a lista é a porta: ele toca em quem vai visitar.
@@ -622,7 +631,7 @@ async function telaSafra(app) {
 const naFilaDeSaida = (plantioId) =>
   estado.saida.some((i) => i.tipo === 'colheita' && i.plantioId === plantioId && !i.recusado);
 
-function cartaoSafra(r) {
+function cartaoSafra(r, regiao) {
   const c = el('div', 'cartao');
   const topo = el('div', 'linha');
   topo.append(el('strong', null, `Safra ${r.safra}`),
@@ -640,6 +649,19 @@ function cartaoSafra(r) {
       `${r.anterior.variacaoPct > 0 ? '+' : ''}${num(r.anterior.variacaoPct)}% `
       + `sobre a safra ${r.anterior.safra}`));
   }
+  // A vizinhança. É o que abre a conversa na porteira — "o senhor fez cinco por
+  // cento acima da região" diz mais do que qualquer número sozinho.
+  if (regiao && !regiao.semGenteBastante && regiao.mediaPonderadaScHa) {
+    const dif = Math.round((r.mediaPonderadaScHa / regiao.mediaPonderadaScHa - 1) * 1000) / 10;
+    c.append(el('p', dif >= 0 ? 'variacao sobe' : 'variacao desce',
+      `${dif > 0 ? '+' : ''}${num(dif)}% em relação a ${regiao.produtores} outros `
+      + `produtores de ${regiao.nivel === 'município' ? regiao.municipio : regiao.uf} `
+      + 'que estão aqui'));
+    // Ele vai repetir isto ao produtor: a frase tem de ir junto, senão o número
+    // vira "a média do município", que ele não é.
+    c.append(el('p', 'sub', `${regiao.base.charAt(0).toUpperCase()}${regiao.base.slice(1)}.`));
+  }
+
   const l = el('div', 'linha');
   l.append(el('span', null, `${num(r.areaColhidaHa)} ha colhidos`),
     el('span', 'num', `${num(r.totalSc)} sc`));
