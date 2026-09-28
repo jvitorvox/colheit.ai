@@ -185,3 +185,32 @@ export async function mediaPorSafra(cx) {
      order by pl.safra desc`);
   return rows;
 }
+
+/**
+ * A safra separada entre o que saiu do nosso catálogo e o resto.
+ *
+ * ⚠️ Não é ensaio comparativo. São lavouras diferentes, em solos, datas e
+ * manejos diferentes — a diferença que aparecer aqui não é da semente sozinha.
+ * O service manda essa frase junto com o número, e ela não é opcional.
+ */
+export async function resultadoPorOrigem(cx, safra) {
+  const { rows } = await cx.query(`
+    select (pl.produto_id is not null)                        as nossa,
+           count(*)::int                                      as talhoes,
+           count(c.produtividade_sc_ha)::int                  as colhidos,
+           coalesce(sum(coalesce(pl.area_ha, t.area_ha))
+                    filter (where c.produtividade_sc_ha is not null), 0) as area_colhida_ha,
+           case when sum(coalesce(pl.area_ha, t.area_ha))
+                     filter (where c.produtividade_sc_ha is not null) > 0
+                then round(sum(coalesce(pl.area_ha, t.area_ha) * c.produtividade_sc_ha)
+                           filter (where c.produtividade_sc_ha is not null)
+                         / sum(coalesce(pl.area_ha, t.area_ha))
+                           filter (where c.produtividade_sc_ha is not null), 1)
+                end                                           as media_ponderada_sc_ha
+      from plantio pl
+      join talhao t on t.id = pl.talhao_id
+      left join colheita c on c.plantio_id = pl.id
+     where pl.safra = $1
+     group by 1`, [safra]);
+  return rows;
+}

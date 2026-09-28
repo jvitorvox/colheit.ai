@@ -53,7 +53,8 @@ export async function montar(ctx, { safra } = {}) {
 
   // Em paralelo: são leituras independentes, e o gestor abre esta tela toda
   // manhã. Em série seriam sete idas ao banco enfileiradas por nada.
-  const [lista, gargalo, venda, oportunidades, penetracao, share, fila, aValidar] =
+  const [lista, gargalo, venda, oportunidades, penetracao, share, fila, aValidar,
+    resultado, porOrigem] =
     await Promise.all([
       pedidos.listar(ctx, { situacao: 'andamento' }),
       pedidos.gargalo(ctx),
@@ -63,6 +64,8 @@ export async function montar(ctx, { safra } = {}) {
       caderno.sharePorMarca(ctx, escolhida),
       visitas.fila(ctx),
       captura.relatos(ctx, { situacao: 'pendente' }),
+      caderno.resultadoDaSafra(ctx, escolhida),
+      caderno.resultadoPorOrigem(ctx, escolhida),
     ]);
 
   return {
@@ -74,6 +77,39 @@ export async function montar(ctx, { safra } = {}) {
     campo: resumirCampo(fila, aValidar),
     mercado: resumirShare(share),
     funil: resumirFunil(oportunidades),
+    resultado: resumirResultado(resultado, porOrigem),
+  };
+}
+
+/* ------------------------------------------------------------- a safra */
+
+/**
+ * O fechamento da safra, do lado de quem vendeu.
+ *
+ * Nada é recalculado: caderno já entrega a ponderada pela área, a variação
+ * contra a safra anterior e a separação entre a nossa semente e a do
+ * concorrente — com as frases que dizem de que base cada número saiu. O painel
+ * escolhe o que cabe na tela de abertura, e carrega as frases junto.
+ */
+function resumirResultado(r, porOrigem) {
+  // Sem talhão plantado não há safra a fechar. Devolver zeros seria um cartão
+  // dizendo "0 sc/ha" para quem ainda não plantou nada — número que parece
+  // resultado ruim quando é ausência de registro.
+  if (!r?.safra || r.talhoes === 0) return null;
+  return {
+    colhidos: r.colhidos,
+    talhoes: r.talhoes,
+    fechada: r.fechada,
+    areaColhidaHa: r.areaColhidaHa,
+    totalSc: r.totalSc,
+    mediaPonderadaScHa: r.mediaPonderadaScHa,
+    base: r.base,
+    anterior: r.anterior,
+    // Os três melhores e os três piores. No meio não há decisão a tomar — o
+    // gestor vai atrás do talhão que fugiu da média, para os dois lados.
+    melhores: r.porTalhao.filter((t) => t.produtividadeScHa !== null).slice(0, DESTAQUES),
+    piores: r.porTalhao.filter((t) => t.produtividadeScHa !== null).slice(-DESTAQUES).reverse(),
+    porOrigem,
   };
 }
 

@@ -835,10 +835,36 @@ ligaria uma coisa à outra.
 | receita | o preço médio **efetivo**, que é o que a bonificada de fato deixou |
 | lacuna da carteira | a taxa de sc/ha e `padrão — confirmar com a agronomia` |
 | share por marca | `área que registramos — não o mercado do território` |
+| produtividade da safra | `média ponderada pela área colhida — não é a média dos talhões` |
+| nossa semente × concorrente | `não é ensaio comparativo — são lavouras diferentes, em solos, datas e manejos diferentes` |
 
 O share é o caso mais perigoso: 54% lido como share de mercado é outra ordem de
 grandeza. A frase vem da API justamente para não depender de alguém lembrar de
 escrevê-la na tela.
+
+### O fechamento da safra
+
+O fim do laço, agora no painel: a semente que saiu do pedido virou saco por
+hectare, e o número volta ao funil da safra seguinte. Produtividade ponderada
+pela área, variação contra a última safra que produziu número, e os talhões que
+fugiram da média **para os dois lados** — é onde há decisão a tomar; no meio da
+distribuição não há.
+
+Nada disso é recalculado aqui. O caderno já entrega a ponderada, a variação e a
+separação por origem, com as frases que dizem de que base cada número saiu; o
+painel escolhe o que cabe na abertura e leva as frases junto.
+
+> **Nossa semente contra a do concorrente** é o número mais perigoso do sistema.
+>
+> Ele mistura semente, solo, data de plantio e manejo, e quem lê num painel
+> atribui a diferença inteira à semente. A ressalva vem colada ao número, não num
+> rodapé. Ele vive em `/caderno/resultado-por-origem`, `soEmpresa` — **fora** do
+> `/caderno/resultado`, que o portal do produtor também lê. É a mesma razão pela
+> qual `nossa` não aparece na tela dele: ali seria marketing com número que não é
+> de ensaio.
+
+Sem talhão plantado o cartão não aparece, em vez de mostrar `0 sc/ha` — número
+que parece resultado ruim quando é ausência de registro.
 
 ## Caderno de campo — e o share por marca
 
@@ -850,6 +876,7 @@ Aqui ele finalmente tem de onde sair.
 GET  /caderno/plantios              o que foi plantado (o produtor vê o dele)
 GET  /caderno/desempenho            como cada cultivar se saiu
 GET  /caderno/resultado             o fechamento da safra, ponderado pela área
+GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige
 POST /caderno/plantios/:id/colheita fecha o laço

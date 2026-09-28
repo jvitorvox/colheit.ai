@@ -37,3 +37,9 @@ rotasCaderno.post('/plantios/:id/colheita', soEmpresa, rota(async (req, res) => 
 rotasCaderno.get('/resultado', rota(async (req, res) => {
   res.json(await servico.resultadoDaSafra(req.ctx, req.query.safra));
 }));
+
+// Leitura comercial, e por isso só empresa — como o share por marca. Fora do
+// /caderno/resultado de propósito: aquele o portal também lê.
+rotasCaderno.get('/resultado-por-origem', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.resultadoPorOrigem(req.ctx, req.query.safra));
+}));

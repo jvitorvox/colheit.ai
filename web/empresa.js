@@ -225,6 +225,7 @@ async function telaPainel(main) {
   main.append(n);
 
   main.append(cartaoGargalo(p.operacao));
+  if (p.resultado) main.append(cartaoResultado(p.resultado));
   main.append(cartaoCampo(p.campo));
   main.append(cartaoCarteira(p.carteira));
   main.append(cartaoMercado(p.mercado));
@@ -265,6 +266,71 @@ function cartaoGargalo(op) {
   c.append(lista);
   c.append(el('p', 'detalhe',
     `Pedidos e mediana de dias parado. Acima de ${op.corteDias} dias fica marcado.`));
+  return c;
+}
+
+/**
+ * O fechamento da safra, do lado de quem vendeu.
+ *
+ * É o fim do laço: a semente que saiu do pedido virou saco por hectare, e o
+ * número volta ao funil da safra seguinte. Os dois indicadores aqui são os que
+ * mais pedem para ser lidos como não são — a média e a comparação de marcas —,
+ * então cada um carrega a frase que diz de que base saiu.
+ */
+function cartaoResultado(r) {
+  const c = el('div', 'cartao');
+  const topo = el('div', 'linha');
+  topo.append(el('p', 'rotulo', 'Fechamento da safra'),
+    el('span', r.fechada ? 'etiqueta boa' : 'etiqueta',
+      r.fechada ? 'fechada' : `${r.colhidos} de ${r.talhoes} colhidos`));
+  c.append(topo);
+
+  if (r.mediaPonderadaScHa === null) {
+    c.append(el('p', 'detalhe', 'Nenhuma colheita registrada nesta safra ainda.'));
+    return c;
+  }
+
+  const n = el('div', 'numeros');
+  n.append(
+    numeroCartao('Produtividade', `${num(r.mediaPonderadaScHa)} sc/ha`,
+      r.anterior
+        ? `${r.anterior.variacaoPct > 0 ? '+' : ''}${num(r.anterior.variacaoPct)}%`
+          + ` sobre a safra ${r.anterior.safra}`
+        : 'sem safra anterior para comparar'),
+    numeroCartao('Colhido', `${num(r.totalSc)} sc`, `${num(r.areaColhidaHa)} ha`),
+  );
+  c.append(n);
+  c.append(el('p', 'detalhe', `${r.base.charAt(0).toUpperCase()}${r.base.slice(1)}.`));
+
+  // A nossa semente contra a do concorrente. O gestor vai ler isto como prova
+  // de desempenho da semente — a ressalva existe para dificultar isso, e vem
+  // colada, não num rodapé.
+  const o = r.porOrigem;
+  if (o?.nossa.mediaPonderadaScHa !== null && o?.demais.mediaPonderadaScHa !== null) {
+    c.append(el('p', 'rotulo', 'Nossa semente e a dos outros'));
+    [['Nossa', o.nossa, true], ['Concorrente', o.demais, false]].forEach(([rot, lado, nossa]) => {
+      const l = el('div', 'linha');
+      l.append(el('span', null, rot),
+        el('span', 'id', `${num(lado.areaColhidaHa)} ha em ${lado.colhidos} talhão(ões)`),
+        el('span', nossa ? 'num grande' : 'num', `${num(lado.mediaPonderadaScHa)} sc/ha`));
+      c.append(l);
+    });
+    c.append(el('p', 'detalhe',
+      `Diferença de ${num(o.diferencaScHa)} sc/ha. `
+      + `${o.base.charAt(0).toUpperCase()}${o.base.slice(1)}.`));
+  }
+
+  // Quem fugiu da média, para os dois lados: é onde há decisão a tomar.
+  const extremos = el('div', 'linha');
+  extremos.append(el('span', 'id', 'Melhor'),
+    el('span', null, `${r.melhores[0].talhao} · ${num(r.melhores[0].produtividadeScHa)} sc/ha`
+      + (r.melhores[0].cultivar ? ` · ${r.melhores[0].cultivar}` : '')));
+  c.append(extremos);
+  const pior = el('div', 'linha');
+  pior.append(el('span', 'id', 'Pior'),
+    el('span', null, `${r.piores[0].talhao} · ${num(r.piores[0].produtividadeScHa)} sc/ha`
+      + (r.piores[0].cultivar ? ` · ${r.piores[0].cultivar}` : '')));
+  c.append(pior);
   return c;
 }
 

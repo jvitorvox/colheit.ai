@@ -14,7 +14,7 @@ import { DIAS_PARADO_DEMAIS } from '../api/src/modulos/pedidos/service.js';
 import { subirApi, criarTenant, criarUsuario, entrar, limparBase } from './ajuda.js';
 
 const SAFRA = '26/27';
-let req, fechar, tGestor, tConsultor, tOutra, produtorId, propriedadeId, talhaoId, talhaoVizinho;
+let req, fechar, tGestor, tConsultor, tOutra, produtorId, propriedadeId, talhaoId, talhaoVizinho, tProdutorPainel;
 let pedidoParado, pedidoNovo;
 
 before(async () => {
@@ -107,7 +107,8 @@ test('o portal do produtor não abre o painel da empresa', async () => {
   const ent = await req('/auth/produtor/entrar', {
     metodo: 'POST', corpo: { telefone: '5566999330011', codigo: cod.corpo.codigo },
   });
-  const r = await painel(ent.corpo.token);
+  tProdutorPainel = ent.corpo.token;
+  const r = await painel(tProdutorPainel);
   assert.equal(r.status, 400);
   assert.match(r.corpo.erro, /área da empresa/);
 });
@@ -237,4 +238,65 @@ test('o painel de uma empresa não enxerga a outra', async () => {
   assert.equal(r.operacao.emAndamento, 0);
   assert.equal(r.carteira.produtores, 0);
   assert.equal(r.campo.naFila, 0);
+});
+
+/* ---------------------------------------------- o fechamento da safra */
+
+test('o painel fecha a safra com a ponderada, e não recalcula nada', async () => {
+  // Um talhão pequeno e ótimo, um grande e mediano: a média simples daria 71,5.
+  const t2 = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tGestor, corpo: { nome: 'Gleba 3', areaHa: 1800 },
+  });
+  const plantar = async (talhao, cultivar, marca, areaHa, scHa) => {
+    const pl = await req('/caderno/plantios', {
+      metodo: 'POST', token: tGestor,
+      corpo: { talhaoId: talhao, safra: SAFRA, ciclo: 'safrinha', cultivar, marca, areaHa },
+    });
+    assert.equal(pl.status, 201, JSON.stringify(pl.corpo));
+    await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+      metodo: 'POST', token: tGestor,
+      corpo: { colhidoEm: '2027-03-10', produtividadeScHa: scHa },
+    });
+  };
+  // FS560 está no catálogo desta revenda; Nidera não.
+  await plantar(talhaoId, 'FS560', 'FS Sementes', 40, 88);
+  await plantar(t2.corpo.id, 'NS7709', 'Nidera', 1800, 55);
+
+  const { resultado: safra } = (await painel(tGestor)).corpo;
+  assert.ok(safra, 'o painel fecha a safra');
+  assert.equal(safra.areaColhidaHa, 1840);
+  assert.equal(safra.mediaPonderadaScHa, 55.7, 'a média simples daria 71,5');
+  assert.equal(safra.totalSc, 40 * 88 + 1800 * 55);
+  assert.match(safra.base, /não é a média dos talhões/,
+    'a frase vem do caderno, não é reescrita aqui');
+  assert.equal(safra.melhores[0].produtividadeScHa, 88);
+  assert.equal(safra.piores[0].produtividadeScHa, 55);
+});
+
+test('a comparação entre a nossa semente e a do concorrente vem com a ressalva', async () => {
+  const { resultado: safra } = (await painel(tGestor)).corpo;
+  const o = safra.porOrigem;
+  assert.equal(o.nossa.mediaPonderadaScHa, 88, 'FS560 é do catálogo desta revenda');
+  assert.equal(o.demais.mediaPonderadaScHa, 55);
+  assert.equal(o.diferencaScHa, 33);
+  assert.match(o.base, /não é ensaio comparativo/,
+    'a diferença mistura semente, solo, data e manejo — e quem lê num painel '
+    + 'atribui tudo à semente');
+});
+
+test('a leitura comercial da safra é só da empresa', async () => {
+  const r = await req(`/caderno/resultado-por-origem?safra=${SAFRA}`, { token: tProdutorPainel });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+
+  // O fechamento em si ele lê: é a terra dele.
+  const dele = await req(`/caderno/resultado?safra=${SAFRA}`, { token: tProdutorPainel });
+  assert.equal(dele.status, 200);
+  assert.equal(dele.corpo.porOrigem, undefined,
+    'a separação nossa/concorrente não vaza pelo endpoint que o portal lê');
+});
+
+test('safra sem colheita nenhuma não inventa fechamento', async () => {
+  const r = await painel(tOutra);
+  assert.equal(r.corpo.resultado, null, 'sem plantio registrado, não há safra a fechar');
 });

@@ -206,3 +206,43 @@ export function resultadoDaSafra(ctx, safra) {
 }
 
 const numeroOuNulo = (v) => (v === null || v === undefined ? null : Number(v));
+
+/**
+ * A safra separada entre a nossa semente e a do concorrente.
+ *
+ * É a pergunta comercial que fecha o laço — "o que eu vendi rendeu mais?" — e
+ * é por isso que fica FORA do `/caderno/resultado`, que o portal também lê. A
+ * mesma razão pela qual `nossa` não aparece na tela do produtor: é leitura
+ * comercial, e ali ela seria marketing com número que não é de ensaio.
+ *
+ * A ressalva não é enfeite. A diferença entre os dois lados mistura semente,
+ * solo, data de plantio e manejo, e quem lê num painel tende a atribuir tudo à
+ * semente. A frase viaja com o número para dificultar essa leitura.
+ */
+export function resultadoPorOrigem(ctx, safra) {
+  const s = textoObrigatorio(safra, 'safra', 10);
+  return comContexto(ctx, async (cx) => {
+    const linhas = await repo.resultadoPorOrigem(cx, s);
+    const lado = (nossa) => {
+      const l = linhas.find((x) => x.nossa === nossa);
+      return {
+        talhoes: l?.talhoes ?? 0,
+        colhidos: l?.colhidos ?? 0,
+        areaColhidaHa: Number(l?.area_colhida_ha ?? 0),
+        mediaPonderadaScHa: numeroOuNulo(l?.media_ponderada_sc_ha),
+      };
+    };
+    const nossa = lado(true);
+    const demais = lado(false);
+    return {
+      safra: s,
+      nossa,
+      demais,
+      diferencaScHa: nossa.mediaPonderadaScHa !== null && demais.mediaPonderadaScHa !== null
+        ? Number((nossa.mediaPonderadaScHa - demais.mediaPonderadaScHa).toFixed(1))
+        : null,
+      base: 'não é ensaio comparativo — são lavouras diferentes, '
+        + 'em solos, datas e manejos diferentes',
+    };
+  });
+}
