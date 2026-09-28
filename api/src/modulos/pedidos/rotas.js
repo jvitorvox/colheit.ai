@@ -22,6 +22,11 @@ rotasPedidos.get('/avisos', rota(async (req, res) => {
   res.json(await servico.avisos(req.ctx, { pendentes: req.query.pendentes === '1' }));
 }));
 
+// Antes de `/:id`, senão "gargalo" seria lido como um identificador.
+rotasPedidos.get('/gargalo', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.gargalo(req.ctx));
+}));
+
 rotasPedidos.get('/:id', rota(async (req, res) => {
   res.json(await servico.buscar(req.ctx, req.params.id));
 }));

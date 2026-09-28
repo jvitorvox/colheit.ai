@@ -262,3 +262,32 @@ async function avisarSePreciso(cx, pedido, etapa, textoPronto) {
     ?? `Pedido ${pedido.numero}: ${e.nome.toLowerCase()}.`;
   await repo.enfileirarAviso(cx, pedido.produtor_id, pedido.id, etapa, texto);
 }
+
+/* ------------------------------------------------------- onde trava */
+
+/**
+ * Onde a operação está parada, por etapa.
+ *
+ * O corte de atenção é da regra de negócio, não da tela: sete dias parado num
+ * pedido de safra é muito, e quem decide isso é o módulo — assim a régua é a
+ * mesma no painel, num aviso ou num relatório que ainda não existe.
+ */
+export const DIAS_PARADO_DEMAIS = 7;
+
+export function gargalo(ctx) {
+  return comContexto(ctx, async (cx) => {
+    const etapas = await repo.gargaloPorEtapa(cx);
+    const linhas = etapas.map((e) => ({
+      ...e,
+      mediana_dias: Number(e.mediana_dias),
+      travando: Number(e.mediana_dias) > DIAS_PARADO_DEMAIS,
+    }));
+    // O pior gargalo é o de maior mediana, e só é gargalo se passar do corte:
+    // apontar "o pior" numa operação saudável ensina a ignorar o painel.
+    const pior = linhas.filter((l) => l.travando)
+      .sort((a, b) => b.mediana_dias - a.mediana_dias)[0] ?? null;
+    return { corteDias: DIAS_PARADO_DEMAIS, pior, etapas: linhas };
+  });
+}
+
+export const safraCorrente = (ctx) => comContexto(ctx, (cx) => repo.safraMaisRecente(cx));

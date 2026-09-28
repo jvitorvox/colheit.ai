@@ -142,3 +142,22 @@ export async function produtorTemVinculo(cx, produtorId) {
     [produtorId]);
   return rows.length > 0;
 }
+
+export async function gargaloPorEtapa(cx) {
+  const { rows } = await cx.query('select * from app.gargalo_por_etapa()');
+  return rows;
+}
+
+/**
+ * A safra corrente, deduzida do que foi vendido.
+ *
+ * Constante no código envelhece em silêncio: vira o ano, a tela fica vazia e
+ * ninguém liga a coisa à outra. O dado sabe em que safra a empresa está.
+ */
+export async function safraMaisRecente(cx) {
+  const { rows } = await cx.query(`
+    select safra from pedido
+     where situacao <> 'cancelado'
+     order by criado_em desc limit 1`);
+  return rows[0]?.safra ?? null;
+}

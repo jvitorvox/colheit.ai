@@ -371,7 +371,7 @@ O console de gestor e consultor, em `/empresa`. Mesma origem, mesmos tokens
 
 | Aba | O que faz |
 |---|---|
-| **Painel** | pedidos em andamento, produtores, fila do campo — e o funil pelas dez etapas, que é onde o gestor vê a operação travar |
+| **Painel** | o painel do gestor — ver [abaixo](#o-painel-do-gestor) |
 | **Pedidos** | lista, abre, avança, retrocede com motivo, muda crédito, lança nota |
 | **Carteira** | produtores, novo cadastro e o convite de acesso |
 | **Do campo** | o que chegou pelo WhatsApp, para o consultor validar ou descartar |
@@ -500,6 +500,76 @@ seria inventar.
 concorrente e potencial ficam do lado de dentro, e a ausência de política é a
 forma mais difícil de desfazer por engano. Se vazar, o consultor deixa de
 registrar a verdade e a base perde o valor.
+
+## O painel do gestor
+
+`GET /painel` — uma chamada, e a tela de abertura da área da empresa sai dela.
+
+### Um módulo sem tabela, e sem SQL
+
+`modulos/painel/` não tem `repository.js`. Ele compõe o que os outros módulos
+já respondem, **pelos services deles**, que é a regra da seção 13. Quando um
+número do painel precisa de SQL novo, ele nasce no módulo dono do dado — foi o
+que aconteceu com o gargalo, que é de pedidos.
+
+E ele não recalcula o que o dono já calculou. `nossoShare`, `lacunaSc` e a
+frase que diz de que base o número saiu chegam prontos de caderno e funil.
+Refazer a conta aqui criaria dois números com o mesmo nome, que divergem no dia
+em que alguém corrigir só um dos dois.
+
+O que **mora** no painel são os cortes de leitura: quantos itens cabem numa tela
+de abertura, e o que é destaque. Régua de negócio não fica na tela — lá ela
+vira decoração que cada um reajusta sem perceber.
+
+### O mesmo painel para gestor e consultor
+
+`soEmpresa` e nada mais. Quem enxerga a empresa inteira e quem enxerga só a
+própria carteira recebem **a mesma resposta**, com números diferentes, porque a
+política decide. Um `if` de papel aqui seria uma segunda regra de visibilidade
+para manter em dia com a primeira. Há teste conferindo que nenhum campo aparece
+ou some por papel.
+
+⚠️ Ressalva honesta: hoje só o vínculo com o produtor é estreitado por carteira.
+Pedido e visita são do tenant inteiro para os dois papéis.
+
+### O gargalo é tempo, não contagem
+
+"8 pedidos na etapa 3" não diz nada — pode ser operação andando. **"8 pedidos
+parados há 20 dias na etapa 3"** é o gestor tendo um problema e não sabendo. O
+painel mostra mediana de dias parado e o pior caso por etapa, com o número do
+pedido mais antigo, porque quem gerencia vai atrás do pedido e não da média.
+
+`app.gargalo_por_etapa()` mede o tempo desde o **último movimento de qualquer
+tipo** — avanço, crédito, nota. Medir só o avanço de etapa marcaria como parado
+o pedido em que se trabalhou ontem, e o gestor aprenderia a ignorar o
+indicador. O corte (`DIAS_PARADO_DEMAIS`, 7) vem de pedidos, não do CSS.
+
+Uma operação saudável **não aponta gargalo nenhum**: destacar "o pior" quando
+nada está travado ensina a ignorar o painel.
+
+### A safra sai do dado
+
+Não há constante de safra na API. Ela vem do pedido mais recente; sem venda
+nenhuma, do calendário (de julho em diante já se fala da safra que vem). A
+resposta diz de onde veio, em `safraVeioDe`.
+
+No console, `SAFRA_ATUAL = '26/27'` deixou de ser constante e virou
+`safraAtual()`, alimentada pelo painel. Como constante ela estava errada desde
+o dia em que foi escrita: viraria o ano, as telas ficariam vazias, e ninguém
+ligaria uma coisa à outra.
+
+### Cada número carrega o que ele não é
+
+| Número | O que vai junto |
+|---|---|
+| volume da safra | a fatia bonificada, que entra no volume e **não** na receita |
+| receita | o preço médio **efetivo**, que é o que a bonificada de fato deixou |
+| lacuna da carteira | a taxa de sc/ha e `padrão — confirmar com a agronomia` |
+| share por marca | `área que registramos — não o mercado do território` |
+
+O share é o caso mais perigoso: 54% lido como share de mercado é outra ordem de
+grandeza. A frase vem da API justamente para não depender de alguém lembrar de
+escrevê-la na tela.
 
 ## Caderno de campo — e o share por marca
 

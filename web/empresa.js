@@ -16,7 +16,7 @@ const brl = (n) => Number(n ?? 0).toLocaleString('pt-BR',
   { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 const dia = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
 
-const estado = { token: localStorage.getItem(SESSAO), eu: null, aba: 'painel' };
+const estado = { token: localStorage.getItem(SESSAO), eu: null, aba: 'painel', safra: null };
 
 async function api(caminho, { metodo = 'GET', corpo } = {}) {
   const resp = await fetch(caminho, {
@@ -170,43 +170,172 @@ const numeroCartao = (rotulo, valor, detalhe) => {
 
 /* ----------------------------------------------------------------- painel */
 
+/**
+ * O painel do gestor.
+ *
+ * Uma chamada só: a API compõe, e as réguas de atenção — o que é parado
+ * demais, o que é atrasado — vêm dela. A tela não decide nenhuma delas, porque
+ * régua em CSS é régua que ninguém mantém.
+ *
+ * A ordem das seções é a ordem do dia de quem gerencia: o que está travado
+ * primeiro, o que está vendendo depois, o mercado por último.
+ */
 async function telaPainel(main) {
-  const [lista, etapas, relatos] = await Promise.all([
-    api('/pedidos'), api('/pedidos/etapas'), api('/captura/relatos?situacao=pendente'),
-  ]);
+  const p = await api('/painel');
 
-  const andamento = lista.filter((p) => p.situacao === 'andamento');
-  const produtores = new Set(lista.map((p) => p.produtor)).size;
+  // A safra do painel vale para o resto do console — as outras telas deixam de
+  // depender da constante do código.
+  estado.safra = p.safra;
 
-  main.append(cabecalho('Painel', `safra em curso · ${estado.eu.tenant}`));
+  main.append(cabecalho('Painel',
+    `safra ${p.safra} · ${estado.eu.tenant}`
+    + (p.safraVeioDe === 'calendário' ? ' · nenhuma venda registrada ainda' : '')));
 
   const n = el('div', 'numeros');
   n.append(
-    numeroCartao('Pedidos em andamento', num(andamento.length), `${lista.length} no total`),
-    numeroCartao('Produtores com pedido', num(produtores)),
-    numeroCartao('Do campo, a validar', num(relatos.length),
-      relatos.length ? 'esperando o consultor' : 'nada na fila'),
+    numeroCartao('Volume da safra', `${num(p.venda.quantidadeSc)} sc`,
+      p.venda.bonificadaPct
+        ? `${p.venda.bonificadaPct}% bonificada — não vira receita`
+        : 'sem bonificada'),
+    numeroCartao('Receita', brl(p.venda.receita),
+      p.venda.precoMedioEfetivo ? `${brl(p.venda.precoMedioEfetivo)}/sc efetivo` : null),
+    numeroCartao('Pedidos em andamento', num(p.operacao.emAndamento),
+      p.operacao.pior ? `${p.operacao.pior.nome} está travando` : 'nada travado'),
+    numeroCartao('Do campo, a validar', num(p.campo.relatosAValidar),
+      p.campo.relatosAValidar ? 'esperando o consultor' : 'nada na fila'),
   );
   main.append(n);
 
-  // O funil pelas dez etapas: é onde o gestor vê a operação travar.
-  const c = el('div', 'cartao');
-  c.append(el('p', 'rotulo', 'Pedidos por etapa'));
-  const funil = el('div', 'funil');
-  const maior = Math.max(1, ...etapas.map((e) => andamento.filter((p) => p.etapa === e.numero).length));
-  etapas.forEach((e) => {
-    const quantos = andamento.filter((p) => p.etapa === e.numero).length;
+  main.append(cartaoGargalo(p.operacao));
+  main.append(cartaoCampo(p.campo));
+  main.append(cartaoCarteira(p.carteira));
+  main.append(cartaoMercado(p.mercado));
+}
+
+/** Onde a operação está parada — por tempo, não por contagem. */
+function cartaoGargalo(op) {
+  const c = el('div', op.pior ? 'cartao destaque' : 'cartao');
+  c.append(el('p', 'rotulo', 'Onde a operação trava'));
+
+  if (op.etapas.length === 0) {
+    c.append(el('p', 'vazio', 'Nenhum pedido em andamento.'));
+    return c;
+  }
+
+  if (op.pior) {
+    const f = el('div', 'faixa');
+    f.append(el('strong', null, `${op.pior.nome}: `),
+      document.createTextNode(
+        `mediana de ${op.pior.mediana_dias} dias parado. O mais antigo é o `
+        + `${op.pior.pior_pedido}, há ${op.pior.pior_dias} dias.`));
+    c.append(f);
+  }
+
+  const maior = Math.max(1, ...op.etapas.map((e) => e.pior_dias));
+  const lista = el('div', 'funil');
+  op.etapas.forEach((e) => {
     const l = el('div', 'faixa-etapa');
     const medidor = el('div', 'medidor');
-    const preenche = el('i');
-    preenche.style.width = `${(quantos / maior) * 100}%`;
-    medidor.append(preenche);
-    l.append(el('span', null, `${e.numero} · ${e.nome}`), medidor,
-      el('span', 'num', String(quantos)));
-    funil.append(l);
+    const barra = el('i');
+    barra.style.width = `${(e.pior_dias / maior) * 100}%`;
+    if (e.travando) barra.classList.add('alerta');
+    medidor.append(barra);
+    l.append(el('span', null, `${e.etapa} · ${e.nome}`), medidor,
+      el('span', 'num', `${e.pedidos} ped · ${e.mediana_dias}d`));
+    lista.append(l);
   });
-  c.append(funil);
-  main.append(c);
+  c.append(lista);
+  c.append(el('p', 'detalhe',
+    `Pedidos e mediana de dias parado. Acima de ${op.corteDias} dias fica marcado.`));
+  return c;
+}
+
+/** Quem está sem ser visitado. É a fila do consultor vista de cima. */
+function cartaoCampo(campo) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'Quem está sem atendimento'));
+
+  if (campo.naFila === 0) {
+    c.append(el('p', 'vazio', 'Nenhum produtor na carteira ainda.'));
+    return c;
+  }
+
+  const l = el('div', 'linha');
+  l.append(el('span', null, `${campo.atrasados} de ${campo.naFila} produtores atrasados`),
+    el('span', 'num', campo.nuncaVisitados ? `${campo.nuncaVisitados} nunca visitados` : ''));
+  c.append(l);
+
+  campo.proximos.forEach((x) => {
+    const f = el('div', 'linha');
+    f.append(el('span', null, x.produtor),
+      el('span', 'num', x.nunca ? 'nunca visitado' : `${x.dias} dias`));
+    c.append(f);
+  });
+  if (campo.corteDias) {
+    c.append(el('p', 'detalhe', `Atrasado é passar de ${campo.corteDias} dias sem visita.`));
+  }
+  return c;
+}
+
+/** A lacuna: quanto a carteira poderia comprar e não comprou. */
+function cartaoCarteira(cart) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'A lacuna da carteira'));
+
+  if (cart.produtores === 0) {
+    c.append(el('p', 'vazio', 'Nenhum produtor na carteira ainda.'));
+    return c;
+  }
+
+  const l = el('div', 'linha');
+  l.append(el('span', null,
+    `${cart.semCompra} de ${cart.produtores} sem compra nesta safra`),
+  el('span', 'num', `${num(cart.lacunaSc)} sc de lacuna`));
+  c.append(l);
+
+  cart.maioresLacunas.forEach((x) => {
+    const f = el('div', 'linha');
+    f.append(el('span', null, x.produtor),
+      el('span', 'num', `${num(x.lacunaSc)} sc`
+        + (x.penetracao === null ? '' : ` · ${x.penetracao}%`)));
+    c.append(f);
+  });
+
+  // A taxa de sc/ha é estimativa, e o painel diz isso em vez de deixar o
+  // potencial passar por medição.
+  c.append(el('p', 'detalhe',
+    `Potencial a ${cart.scPorHa} sc/ha (${cart.origemDaTaxa}).`));
+  return c;
+}
+
+/** O share por marca, com o denominador escrito embaixo. */
+function cartaoMercado(m) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'Quanto da área é nossa'));
+
+  if (m.marcas === 0) {
+    c.append(el('p', 'vazio',
+      'Nenhum plantio registrado nesta safra — sem talhão, não há share.'));
+    return c;
+  }
+
+  const topo = el('div', 'linha');
+  topo.append(el('span', 'num grande', m.nossoShare === null ? '—' : `${m.nossoShare}%`),
+    el('span', 'id', `de ${num(m.areaObservadaHa)} ha em ${m.marcas} marca(s)`));
+  c.append(topo);
+
+  m.topo.forEach((x) => {
+    const l = el('div', 'linha');
+    l.append(el('span', null, x.marca),
+      x.nossa ? el('span', 'etiqueta boa', 'nossa') : el('span', 'etiqueta', 'concorrente'),
+      el('span', 'num', x.share === null ? '—' : `${x.share}%`));
+    c.append(l);
+  });
+
+  // A frase vem da API de propósito: 75% aqui é "da área que registramos", e
+  // sem isso o número é lido como share de mercado — outra ordem de grandeza.
+  c.append(el('p', 'detalhe', `Base: ${m.base}.`));
+  return c;
 }
 
 /* ---------------------------------------------------------------- pedidos */
@@ -693,17 +822,25 @@ function janelaVisita(alvo) {
 
 /* --------------------------------------------------------------- catálogo */
 
-const SAFRA_ATUAL = '26/27';
+/**
+ * A safra que as telas usam.
+ *
+ * Vem do painel, que a deduz do que foi vendido. A constante ficou só como
+ * chão para o caso de alguém abrir uma tela antes do painel — e como constante
+ * ela estava errada desde o momento em que foi escrita: viraria o ano, as telas
+ * ficariam vazias, e ninguém ligaria uma coisa à outra.
+ */
+const safraAtual = () => estado.safra ?? '26/27';
 
 async function telaCatalogo(main) {
   const [produtos, resumo] = await Promise.all([
-    api(`/catalogo/produtos?safra=${encodeURIComponent(SAFRA_ATUAL)}`),
-    api(`/catalogo/resumo?safra=${encodeURIComponent(SAFRA_ATUAL)}`),
+    api(`/catalogo/produtos?safra=${encodeURIComponent(safraAtual())}`),
+    api(`/catalogo/resumo?safra=${encodeURIComponent(safraAtual())}`),
   ]);
 
   const novo = el('button', 'botao', 'Novo produto');
   novo.onclick = () => janelaProduto();
-  main.append(cabecalho('Catálogo', `safra ${SAFRA_ATUAL} · ${produtos.length} produtos`, [novo]));
+  main.append(cabecalho('Catálogo', `safra ${safraAtual()} · ${produtos.length} produtos`, [novo]));
 
   if (produtos.length === 0) {
     main.append(el('p', 'vazio', 'Nenhum produto ainda. O pedido aceita item digitado à mão até lá.'));
@@ -736,7 +873,7 @@ async function telaCatalogo(main) {
  */
 function cartaoResumo(resumo) {
   const c = el('div', 'cartao');
-  c.append(el('p', 'rotulo', `Vendido na safra ${SAFRA_ATUAL}`));
+  c.append(el('p', 'rotulo', `Vendido na safra ${safraAtual()}`));
   c.append(tabela(
     ['Produto', 'Volume', 'Bonificada', 'Receita', 'Médio cobrado', 'Médio efetivo'],
     resumo.map((r) => {
@@ -766,7 +903,7 @@ const janelaProduto = () => janela('Novo produto', [
 ], (v) => api('/catalogo/produtos', { metodo: 'POST', corpo: v }), 'Criar');
 
 const janelaPreco = (p) => janela(`Preço — ${p.nome}`, [
-  { nome: 'safra', rotulo: 'Safra', valor: SAFRA_ATUAL },
+  { nome: 'safra', rotulo: 'Safra', valor: safraAtual() },
   { nome: 'canal', rotulo: 'Canal (direto ou distribuidor)', valor: 'direto' },
   { nome: 'valor', rotulo: `Valor por ${p.unidade}`, tipo: 'number' },
   { nome: 'royaltiesSc', rotulo: 'Royalties por saco', tipo: 'number', obrigatorio: false },
@@ -788,7 +925,7 @@ const ROTULO_ESTAGIO = {
 };
 
 async function telaFunil(main) {
-  const safra = encodeURIComponent(SAFRA_ATUAL);
+  const safra = encodeURIComponent(safraAtual());
   const [resumo, lista, pen] = await Promise.all([
     api(`/funil/resumo?safra=${safra}`),
     api(`/funil?safra=${safra}`),
@@ -797,7 +934,7 @@ async function telaFunil(main) {
 
   const nova = el('button', 'botao', 'Nova oportunidade');
   nova.onclick = () => janelaOportunidade();
-  main.append(cabecalho('Funil', `safra ${SAFRA_ATUAL}`, [nova]));
+  main.append(cabecalho('Funil', `safra ${safraAtual()}`, [nova]));
 
   main.append(cartaoFunil(resumo));
   main.append(cartaoPenetracao(pen));
@@ -882,7 +1019,7 @@ async function janelaOportunidade() {
   janela('Nova oportunidade', [
     { nome: 'produtor', rotulo: `Produtor (${produtores.map((p) => p.nome).join(', ')})`,
       valor: produtores[0].nome },
-    { nome: 'safra', rotulo: 'Safra', valor: SAFRA_ATUAL },
+    { nome: 'safra', rotulo: 'Safra', valor: safraAtual() },
     { nome: 'potencialSc', rotulo: 'Potencial em sacos (em branco: estima pela área)',
       tipo: 'number', obrigatorio: false },
   ], async (v) => {
@@ -910,7 +1047,7 @@ const janelaMover = (o) => janela(`Mover — ${o.produtor}`, [
 /* --------------------------------------------------- caderno de campo */
 
 async function telaCaderno(main) {
-  const safra = encodeURIComponent(SAFRA_ATUAL);
+  const safra = encodeURIComponent(safraAtual());
   const [share, plantios, desempenho] = await Promise.all([
     api(`/caderno/share?safra=${safra}`),
     api(`/caderno/plantios?safra=${safra}`),
@@ -919,7 +1056,7 @@ async function telaCaderno(main) {
 
   const novo = el('button', 'botao', 'Registrar plantio');
   novo.onclick = () => janelaPlantio();
-  main.append(cabecalho('Lavoura', `caderno de campo · safra ${SAFRA_ATUAL}`, [novo]));
+  main.append(cabecalho('Lavoura', `caderno de campo · safra ${safraAtual()}`, [novo]));
 
   main.append(cartaoShare(share));
   if (desempenho.length) main.append(cartaoDesempenho(desempenho));
@@ -1011,7 +1148,7 @@ async function janelaPlantio() {
   janela('Registrar plantio', [
     { nome: 'talhao', rotulo: `Talhão (${talhoes.map((t) => t.nome).join(', ')})`,
       valor: talhoes[0].nome },
-    { nome: 'safra', rotulo: 'Safra', valor: SAFRA_ATUAL },
+    { nome: 'safra', rotulo: 'Safra', valor: safraAtual() },
     { nome: 'ciclo', rotulo: 'Ciclo (safra ou safrinha)', valor: 'safra' },
     { nome: 'cultivar', rotulo: 'Cultivar' },
     { nome: 'marca', rotulo: 'Marca — nossa ou do concorrente' },
