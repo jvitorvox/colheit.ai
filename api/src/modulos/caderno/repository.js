@@ -123,7 +123,7 @@ export async function desempenho(cx, safra) {
  * `coalesce(pl.area_ha, t.area_ha)` porque o plantio nem sempre traz a área: em
  * talhão plantado inteiro, quem sabe é o talhão.
  */
-export async function resultadoDaSafra(cx, safra) {
+export async function resultadoDaSafra(cx, safra, produtorId) {
   const { rows } = await cx.query(`
     with base as (
       select pl.id, pl.cultivar, pl.marca, t.nome as talhao,
@@ -133,6 +133,10 @@ export async function resultadoDaSafra(cx, safra) {
         join talhao t on t.id = pl.talhao_id
         left join colheita c on c.plantio_id = pl.id
        where pl.safra = $1
+         and ($2::uuid is null or exists (
+               select 1 from produtor_propriedade pp
+                where pp.propriedade_id = t.propriedade_id
+                  and pp.fim is null and pp.produtor_id = $2))
     )
     select count(*)::int                                            as talhoes,
            count(sc_ha)::int                                        as colhidos,
@@ -144,20 +148,24 @@ export async function resultadoDaSafra(cx, safra) {
                            / sum(ha) filter (where sc_ha is not null), 1)
                 end                                                 as media_ponderada_sc_ha,
            max(colhido_em)                                          as ultima_colheita
-      from base`, [safra]);
+      from base`, [safra, produtorId ?? null]);
   return rows[0];
 }
 
-export async function talhoesDaSafra(cx, safra) {
+export async function talhoesDaSafra(cx, safra, produtorId) {
   const { rows } = await cx.query(`
-    select t.nome as talhao, pl.cultivar, pl.marca,
+    select pl.id as plantio_id, t.nome as talhao, pl.cultivar, pl.marca,
            coalesce(pl.area_ha, t.area_ha) as area_ha,
            c.produtividade_sc_ha as sc_ha, c.colhido_em, c.umidade
       from plantio pl
       join talhao t on t.id = pl.talhao_id
       left join colheita c on c.plantio_id = pl.id
      where pl.safra = $1
-     order by c.produtividade_sc_ha desc nulls last, t.nome`, [safra]);
+       and ($2::uuid is null or exists (
+             select 1 from produtor_propriedade pp
+              where pp.propriedade_id = t.propriedade_id
+                and pp.fim is null and pp.produtor_id = $2))
+     order by c.produtividade_sc_ha desc nulls last, t.nome`, [safra, produtorId ?? null]);
   return rows;
 }
 

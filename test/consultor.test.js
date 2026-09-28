@@ -315,3 +315,88 @@ test('a listagem já traz os ids das fotos, sem uma ida por visita', async () =>
   assert.ok(lista.corpo.every((v) => Array.isArray(v.fotos)));
   assert.ok(lista.corpo.some((v) => v.fotos.length > 0));
 });
+
+/* -------------------------------------------------- o resultado da safra */
+
+let plantioAberto;
+
+test('o consultor fecha a colheita do campo — e só a da carteira dele', async () => {
+  const gestor = await entrar(req, 'gestora@norte.com');
+  const prop = (await req('/cadastro/produtores', { token: tConsultor })).corpo[0];
+  assert.ok(prop);
+
+  const f = (await req('/cadastro/propriedades', { token: gestor })).corpo
+    .find((x) => x.produtor_id === produtorId) ?? null;
+  const propriedadeId = f?.id
+    ?? (await req('/cadastro/propriedades', {
+      metodo: 'POST', token: gestor,
+      corpo: { nome: 'Fazenda Sabo', produtorId, municipio: 'Sorriso', uf: 'MT', areaHa: 1200 },
+    })).corpo.id;
+
+  const t = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: gestor, corpo: { nome: 'Gleba 1', areaHa: 600 },
+  });
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: gestor,
+    corpo: {
+      talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS560',
+      marca: 'FS Sementes', areaHa: 600,
+    },
+  });
+  assert.equal(pl.status, 201, JSON.stringify(pl.corpo));
+  plantioAberto = pl.corpo.id;
+
+  // É o consultor quem está no campo quando a colhedora passa.
+  const r = await req(`/caderno/plantios/${plantioAberto}/colheita`, {
+    metodo: 'POST', token: tConsultor,
+    corpo: { produtividadeScHa: 64.8, umidade: 13.2 },
+  });
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+});
+
+test('reenviar a colheita grava o mesmo número — uma por plantio', async () => {
+  // É o que torna o reenvio da fila seguro sem chave de cliente: `colheita`
+  // tem `plantio_id unique`, e o insert é upsert.
+  const de_novo = await req(`/caderno/plantios/${plantioAberto}/colheita`, {
+    metodo: 'POST', token: tConsultor,
+    corpo: { produtividadeScHa: 64.8, umidade: 13.2 },
+  });
+  assert.equal(de_novo.status, 201);
+
+  const { rows } = await dono.query(
+    'select count(*)::int as n from colheita where plantio_id = $1', [plantioAberto]);
+  assert.equal(rows[0].n, 1, 'duas tentativas, uma colheita');
+});
+
+test('o resultado por produtor é o que ele leva para a porteira', async () => {
+  const r = await req(`/caderno/resultado?produtorId=${produtorId}`, { token: tConsultor });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.mediaPonderadaScHa, 64.8);
+  assert.equal(r.corpo.porTalhao[0].talhao, 'Gleba 1');
+  assert.ok(r.corpo.porTalhao[0].plantioId,
+    'o app precisa do plantio para saber onde registrar a colheita que falta');
+});
+
+test('o filtro por produtor não é porta dos fundos para a terra de outro', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tOutraRevenda, corpo: { nome: 'Fora da carteira' },
+  });
+  const r = await req(`/caderno/resultado?produtorId=${outro.corpo.id}`, { token: tConsultor });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo.talhoes, 0, 'a política filtra antes do parâmetro');
+});
+
+test('produtorId que não é uuid é recusado', async () => {
+  const r = await req('/caderno/resultado?produtorId=qualquer-coisa', { token: tConsultor });
+  assert.equal(r.status, 400);
+  assert.equal(r.corpo.campo, 'produtorId');
+});
+
+test('a leitura comercial da safra não abre para o app do consultor por engano', async () => {
+  // Ele é empresa, então LÊ — o que não pode é o endpoint se confundir com o
+  // que o portal do produtor consome.
+  const r = await req('/caderno/resultado-por-origem?safra=26/27', { token: tConsultor });
+  assert.equal(r.status, 200);
+  const doPortal = await req('/caderno/resultado?safra=26/27', { token: tConsultor });
+  assert.equal(doPortal.corpo.porOrigem, undefined);
+});

@@ -618,6 +618,46 @@ foto é uma subida a mais numa conexão que já está ruim.
 As fotos aparecem em **Visitas**, no console, e na tela de **Visitas** do portal
 do produtor — foto que ninguém vê não valia ter sido tirada.
 
+### A safra na mão de quem está no campo
+
+Terceira aba do app. Duas coisas num lugar só, e as duas vêm da mesma pergunta:
+**o que saiu de cada talhão**.
+
+**Antes de bater na porteira**, o número que abre a conversa: "José fez 67,6 sc/ha
+nesta safra, 18% acima da passada". A carteira inteira na entrada, o produtor
+escolhido depois.
+
+**Depois que a colhedora passa**, o talhão que falta fechar vira botão. É o
+consultor quem está lá quando o número existe — e até agora só o console
+registrava colheita.
+
+A aba fica **fora do caminho da visita**, de propósito: a tela de registro é
+medida pela H1 e tem de caber em 60 segundos. Enfiar o histórico da safra nela
+seria derrubar a hipótese para ganhar contexto.
+
+### A fila de saída passou a carregar dois tipos
+
+Uma fila só, ordenada por tempo: visita e colheita do mesmo dia saem na ordem em
+que aconteceram. O que muda por tipo é só a porta.
+
+E os dois são idempotentes, que é o que torna o reenvio seguro:
+
+| | Como o reenvio não duplica |
+|---|---|
+| visita | `cliente_id` gerado no celular, `on conflict do nothing` |
+| colheita | uma por plantio (`plantio_id unique`), e o insert é upsert |
+
+A colheita **não precisa de chave de cliente**: reenviar grava o mesmo número no
+mesmo talhão. A contrapartida é que ela sobrescreve — se o gestor corrigir o
+número enquanto um reenvio antigo ainda está na fila, o reenvio vence. A fila
+drena em minutos, e o upsert é o comportamento que o caderno já tinha para
+replantio e correção.
+
+Perder o sinal **não apaga a tela**: a última leitura da safra fica na memória da
+página, e o aviso diz que os números são da última vez que houve sinal. Sem isso,
+cortar a conexão no meio do talhão limpava justamente o número que ele tinha
+levado até lá.
+
 ### O que ficou de fora, e por quê
 
 **Background Sync.** O reenvio mora na página, não no service worker. Levá-lo
@@ -876,6 +916,7 @@ Aqui ele finalmente tem de onde sair.
 GET  /caderno/plantios              o que foi plantado (o produtor vê o dele)
 GET  /caderno/desempenho            como cada cultivar se saiu
 GET  /caderno/resultado             o fechamento da safra, ponderado pela área
+                                    (?produtorId= para um produtor só)
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige

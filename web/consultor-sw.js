@@ -11,7 +11,7 @@
 // Escopo `/consultor`: o portal do produtor tem o `sw.js` dele, que serve
 // leitura e push e não quer saber de fila de escrita.
 
-const VERSAO = 'campo-v1';
+const VERSAO = 'campo-v2';
 const CASCA = `casca-${VERSAO}`;
 const DADOS = `dados-${VERSAO}`;
 
@@ -22,7 +22,7 @@ const ARQUIVOS = [
 
 // Só a fila do dia e quem sou eu. Nada de /auth/login: resposta de
 // autenticação não se guarda, nem em cache de casca.
-const GUARDAVEIS = ['/visitas/fila', '/auth/eu'];
+const GUARDAVEIS = ['/visitas/fila', '/auth/eu', '/caderno/resultado'];
 
 self.addEventListener('install', (ev) => {
   ev.waitUntil(

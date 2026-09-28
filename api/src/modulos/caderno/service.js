@@ -146,7 +146,8 @@ export async function registrarDePlanteRelato(ctx, relato) {
  * Quem enxerga o quê é a política: o produtor vê a terra dele, a empresa vê a
  * carteira. A mesma resposta serve aos dois.
  */
-export function resultadoDaSafra(ctx, safra) {
+export function resultadoDaSafra(ctx, safra, produtorId) {
+  if (produtorId) uuidValido(produtorId, 'produtorId');
   return comContexto(ctx, async (cx) => {
     const porSafra = await repo.mediaPorSafra(cx);
     const safras = porSafra.map((s) => s.safra);
@@ -162,8 +163,8 @@ export function resultadoDaSafra(ctx, safra) {
       .find((s) => s.media_ponderada_sc_ha !== null) ?? null;
 
     const [bruto, talhoes] = await Promise.all([
-      repo.resultadoDaSafra(cx, atual),
-      repo.talhoesDaSafra(cx, atual),
+      repo.resultadoDaSafra(cx, atual, produtorId),
+      repo.talhoesDaSafra(cx, atual, produtorId),
     ]);
 
     const media = numeroOuNulo(bruto.media_ponderada_sc_ha);
@@ -193,6 +194,7 @@ export function resultadoDaSafra(ctx, safra) {
         }
         : null,
       porTalhao: talhoes.map((t) => ({
+        plantioId: t.plantio_id,
         talhao: t.talhao,
         cultivar: t.cultivar,
         marca: t.marca,
