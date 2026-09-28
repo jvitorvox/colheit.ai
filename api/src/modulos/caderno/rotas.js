@@ -49,3 +49,9 @@ rotasCaderno.get('/resultado-por-origem', soEmpresa, rota(async (req, res) => {
 rotasCaderno.get('/resultado-por-franqueado', soEmpresa, rota(async (req, res) => {
   res.json(await servico.safraPorFranqueado(req.ctx, req.query.safra));
 }));
+
+// A safra por município. Sem nome de franqueado — é o município da terra, que
+// está na propriedade que o próprio tenant cadastrou.
+rotasCaderno.get('/resultado-por-municipio', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.safraPorMunicipio(req.ctx, req.query.safra));
+}));

@@ -240,6 +240,7 @@ async function telaPainel(main) {
 
   if (p.operacao) main.append(cartaoGargalo(p.operacao));
   if (p.rede) main.append(cartaoRede(p.rede));
+  if (p.territorios) main.append(cartaoTerritorios(p.territorios));
   if (p.resultado) main.append(cartaoResultado(p.resultado));
   if (p.campo) main.append(cartaoCampo(p.campo));
   if (p.carteira) main.append(cartaoCarteira(p.carteira));
@@ -322,6 +323,52 @@ function cartaoRede(rede) {
   c.append(el('p', 'detalhe',
     'Territórios diferentes, com solo, clima e manejo diferentes — quem está no '
     + 'topo pode apenas ter a melhor terra.'));
+  return c;
+}
+
+/**
+ * A safra por município.
+ *
+ * É o recorte da distribuidora, que vende em vários territórios e não tem rede
+ * a comparar: de qual região vem a melhor lavoura. E não nomeia franqueado
+ * nenhum — o município está na propriedade que ela mesma cadastrou.
+ *
+ * Serve a qualquer um que venda em mais de um lugar, e some quando é um só.
+ */
+function cartaoTerritorios(lista) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'A safra por município'));
+
+  const comNumero = lista.filter((m) => m.mediaPonderadaScHa !== null);
+  const maior = Math.max(1, ...comNumero.map((m) => m.mediaPonderadaScHa));
+
+  // Dez municípios já é lista de relatório; a tela de abertura mostra os
+  // extremos, que é onde há decisão a tomar.
+  const mostrar = lista.length > 8 ? [...lista.slice(0, 4), ...lista.slice(-4)] : lista;
+
+  mostrar.forEach((m) => {
+    const l = el('div', 'faixa-etapa');
+    const medidor = el('div', 'medidor');
+    if (m.mediaPonderadaScHa !== null) {
+      const barra = el('i');
+      barra.style.width = `${(m.mediaPonderadaScHa / maior) * 100}%`;
+      medidor.append(barra);
+    }
+    l.append(el('span', null, `${m.municipio}/${m.uf}`), medidor,
+      el('span', 'num', m.mediaPonderadaScHa === null
+        ? 'sem colheita'
+        : `${num(m.mediaPonderadaScHa)} sc/ha`));
+    l.title = `${num(m.areaColhidaHa)} ha colhidos · ${m.colhidos} de ${m.talhoes} talhões`;
+    c.append(l);
+  });
+
+  if (mostrar.length < lista.length) {
+    c.append(el('p', 'detalhe',
+      `Os quatro melhores e os quatro piores de ${lista.length} municípios.`));
+  }
+  c.append(el('p', 'detalhe',
+    'Solo, clima e manejo mudam de um município para o outro — a diferença não '
+    + 'é só de quem plantou.'));
   return c;
 }
 

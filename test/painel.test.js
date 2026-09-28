@@ -471,3 +471,38 @@ test('o franqueado continua vendo só o território dele, não a rede', async ()
   assert.ok(!safra.porTalhao.some((t) => t.talhao === 'Chapada'),
     'e a lavoura do outro franqueado não entra na safra dele');
 });
+
+/* ---------------------------------------------- o painel da distribuidora */
+
+test('a distribuidora não ganha cartão de rede — ela não tem rede', async () => {
+  // Ela compra de vários franqueados, então enxerga vários `franqueado_id` nos
+  // pedidos dela. Sem a junção com `rede`, isso virava um cartão comparando
+  // fornecedores anônimos: o nome do tenant não abre para ela, e a pergunta
+  // "quem é o melhor franqueado" é de quem tem rede.
+  const p = (await painel(tGestor)).corpo;
+  assert.equal(p.rede, null);
+  const direto = await req(`/caderno/resultado-por-franqueado?safra=${SAFRA}`, { token: tGestor });
+  assert.equal(direto.status, 200);
+  assert.deepEqual(direto.corpo, []);
+});
+
+test('o recorte dela é por município, e não nomeia franqueado nenhum', async () => {
+  const r = await req(`/caderno/resultado-por-municipio?safra=${SAFRA}`, { token: tGestor });
+  assert.equal(r.status, 200);
+  assert.ok(r.corpo.length >= 1);
+  assert.ok(r.corpo.every((m) => m.municipio && m.uf));
+  assert.ok(r.corpo.every((m) => !('franqueado' in m) && !('franqueadoId' in m)),
+    'o município está na propriedade que ela cadastrou; o franqueado não é dela');
+});
+
+test('a franqueadora continua com o cartão de rede, e com os nomes', async () => {
+  const p = (await painel(tFranqueadora)).corpo;
+  assert.ok(p.rede, 'quem tem rede compara franqueado');
+  assert.ok(p.rede.every((f) => f.franqueado && f.franqueado !== 'sem nome'));
+});
+
+test('um município só não vira cartão de comparação', async () => {
+  const p = (await painel(tFranqueado)).corpo;
+  // O franqueado deste arquivo tem território num município só.
+  if (p.territorios) assert.ok(p.territorios.length > 1);
+});

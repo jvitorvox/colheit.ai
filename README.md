@@ -999,6 +999,44 @@ E ele carrega a ressalva junto, como todos os outros: *territórios diferentes,
 com solo, clima e manejo diferentes — quem está no topo pode apenas ter a melhor
 terra.*
 
+### E a distribuidora, que compra de vários
+
+O painel dela **já funcionava**: ela opera as vendas dela, então tem carteira,
+fila de campo e fechamento de safra como qualquer revenda. Não havia camada a
+construir — havia um vazamento de enquadramento a consertar e um recorte a dar.
+
+**O vazamento.** Ela compra de vários franqueados, então enxerga vários
+`franqueado_id` nos pedidos dela — e o cartão "a rede, por franqueado" aparecia
+para ela, comparando fornecedores como **"sem nome"**, já que o nome do tenant só
+abre para a franqueadora. Agora a consulta junta com `rede`: a pergunta "qual é o
+melhor franqueado" é de quem tem rede.
+
+Repare que a correção não é um `if` de tipo — é uma junção. Quem não tem linha em
+`rede` como franqueadora não tem cartão de rede, e isso vale para a revenda, para
+o franqueado e para ela.
+
+**O recorte que é dela**: a safra por **município**. Vende em vários territórios,
+não tem rede a comparar, e o que quer saber é de qual região vem a melhor
+lavoura.
+
+E ele **não nomeia franqueado nenhum**. O município está na propriedade que ela
+mesma cadastrou — é dado dela. A confidencialidade da cadeia não é ferida por um
+agrupamento de vendas próprias.
+
+```
+A SAFRA POR MUNICÍPIO
+Rio Verde/GO           ████████████████  71,4 sc/ha
+Jataí/GO               ███████████████   68,9 sc/ha
+Sorriso/MT             ██████████████    63,9 sc/ha
+Lucas do Rio Verde/MT  █████████████     58,2 sc/ha
+Solo, clima e manejo mudam de um município para o outro — a
+diferença não é só de quem plantou.
+```
+
+Acima de oito municípios mostra os quatro melhores e os quatro piores: no meio
+da distribuição não há decisão a tomar, e a tela de abertura não é relatório.
+
+
 
 
 ## Caderno de campo — e o share por marca
@@ -1014,6 +1052,7 @@ GET  /caderno/resultado             o fechamento da safra, ponderado pela área
                                     (?produtorId= para um produtor só)
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/resultado-por-franqueado  a safra de cada franqueado da rede
+GET  /caderno/resultado-por-municipio   a safra por região, sem nomear franqueado
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige
 POST /caderno/plantios/:id/colheita fecha o laço

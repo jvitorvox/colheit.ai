@@ -246,6 +246,13 @@ export async function safraPorFranqueado(cx, safra) {
       select distinct pd.franqueado_id, t.id as talhao_id
         from pedido pd
         join talhao t on t.propriedade_id = pd.propriedade_id
+        -- Só os franqueados da MINHA rede. Sem esta junção, a distribuidora —
+        -- que compra de vários franqueados e por isso enxerga vários
+        -- franqueado_id nos pedidos dela — ganhava um cartão comparando
+        -- fornecedores anônimos, porque o nome do tenant não abre para ela.
+        -- A pergunta "quem é o melhor franqueado" é de quem tem rede.
+        join rede r on r.franqueado_id = pd.franqueado_id
+                   and r.franqueadora_id = app.tenant_atual()
        where pd.franqueado_id is not null and pd.situacao <> 'cancelado'
     )
     select f.franqueado_id,
@@ -267,6 +274,40 @@ export async function safraPorFranqueado(cx, safra) {
       left join colheita c on c.plantio_id = pl.id
       left join tenant tn on tn.id = f.franqueado_id
      group by f.franqueado_id, tn.nome
+     order by media_ponderada_sc_ha desc nulls last`, [safra]);
+  return rows;
+}
+
+/**
+ * A safra aberta por município.
+ *
+ * É o recorte da DISTRIBUIDORA, que vende em vários territórios e não tem rede
+ * para comparar. E não nomeia ninguém: agrupa pelo município da terra, que é
+ * dado dela — está na propriedade que ela mesma cadastrou.
+ *
+ * Serve a qualquer tenant que venda em mais de um lugar; o service só devolve
+ * cartão quando há mais de uma linha, porque com uma não há comparação.
+ */
+export async function safraPorMunicipio(cx, safra) {
+  const { rows } = await cx.query(`
+    select pr.municipio, pr.uf,
+           count(distinct pl.id)::int                             as talhoes,
+           count(c.produtividade_sc_ha)::int                      as colhidos,
+           coalesce(sum(coalesce(pl.area_ha, t.area_ha))
+                    filter (where c.produtividade_sc_ha is not null), 0) as area_colhida_ha,
+           case when sum(coalesce(pl.area_ha, t.area_ha))
+                     filter (where c.produtividade_sc_ha is not null) > 0
+                then round(sum(coalesce(pl.area_ha, t.area_ha) * c.produtividade_sc_ha)
+                           filter (where c.produtividade_sc_ha is not null)
+                         / sum(coalesce(pl.area_ha, t.area_ha))
+                           filter (where c.produtividade_sc_ha is not null), 1)
+                end                                               as media_ponderada_sc_ha
+      from plantio pl
+      join talhao t on t.id = pl.talhao_id
+      join propriedade pr on pr.id = t.propriedade_id
+      left join colheita c on c.plantio_id = pl.id
+     where pl.safra = $1 and pr.municipio is not null
+     group by pr.municipio, pr.uf
      order by media_ponderada_sc_ha desc nulls last`, [safra]);
   return rows;
 }

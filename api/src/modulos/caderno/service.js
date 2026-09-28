@@ -281,3 +281,25 @@ export function safraPorFranqueado(ctx, safra) {
     }));
   });
 }
+
+/**
+ * A safra por município — o recorte de quem vende em mais de um território.
+ *
+ * A distribuidora compra de vários franqueados e não tem rede a comparar; o que
+ * ela quer saber é de qual região vem a melhor lavoura. Não nomeia franqueado
+ * nenhum: o município está na propriedade que ela mesma cadastrou.
+ */
+export function safraPorMunicipio(ctx, safra) {
+  const s = textoObrigatorio(safra, 'safra', 10);
+  return comContexto(ctx, async (cx) => {
+    const linhas = await repo.safraPorMunicipio(cx, s);
+    return linhas.map((l) => ({
+      municipio: l.municipio,
+      uf: l.uf,
+      talhoes: l.talhoes,
+      colhidos: l.colhidos,
+      areaColhidaHa: Number(l.area_colhida_ha),
+      mediaPonderadaScHa: numeroOuNulo(l.media_ponderada_sc_ha),
+    }));
+  });
+}
