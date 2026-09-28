@@ -370,6 +370,34 @@ mantém a régua honesta sem virar alavanca.
 regional é por município: viraria uma lista, que é relatório e não mensagem. Essa
 abertura existe no painel do gestor.
 
+### Quem tem rede recebe a rede
+
+A exceção à regra acima. A franqueadora tem poucos franqueados, e a comparação
+de cada um já vem resolvida numa linha — cabe numa mensagem, ao contrário de uma
+carteira espalhada por municípios.
+
+```
+> como foi a safra?
+Safra 26/27, a rede:
+FS Mato Grosso: 68,6 sc/ha, +6,4% no território dele.
+FS Goiás: 74,2 sc/ha, +4,1% no território dele.
+FS Bahia: 48,1 sc/ha, -9,8% no território dele.
+1 sem comparação ainda — território com pouca gente aqui.
+Cada um contra o próprio território, que inclui quem não comprou da rede.
+```
+
+Ordenada **pela variação, não pela produtividade**: numa mensagem curta o que
+interessa é quem está fora da própria régua, para os dois lados. Cinco linhas é o
+teto; acima disso a mensagem diz quantos ficaram e manda para o painel.
+
+Franqueado cujo território ainda não tem cinco produtores **é contado, não
+sumido** — o que falta ali é vizinhança, não desempenho, e some-lo confundiria as
+duas coisas.
+
+A condição é **ter rede**, não ser de um tipo: `redeContraRegiao` devolve vazio
+para quem não tem, e a revenda cai no resumo de sempre. Há teste fazendo a mesma
+pergunta pelos dois telefones.
+
 Três desfechos, porque é o que a realidade tem: **um nome** responde por ele,
 **mais de um** devolve a lista e pede o nome mais completo, e **nenhum** vale a
 carteira inteira. Chutar entre dois Sabo seria responder com o número do vizinho.

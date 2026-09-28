@@ -11,7 +11,7 @@ import { migrar } from '../api/src/migrar.js';
 import { subirApi, criarTenant, criarUsuario, entrar, limparBase } from './ajuda.js';
 
 const SAFRA = '26/27';
-let req, fechar, tRevenda;
+let req, base, fechar, tRevenda;
 const produtores = [];
 
 /** Um produtor com uma gleba colhida em Sorriso, salvo indicação contrária. */
@@ -57,7 +57,7 @@ before(async () => {
   await limparBase();
   const revenda = await criarTenant('3 Tentos', '11111111000111', 'distribuidor');
   await criarUsuario(revenda, 'Gestora', 'gestora@3t.com', 'gestor');
-  ({ req, fechar } = await subirApi());
+  ({ req, base, fechar } = await subirApi());
   tRevenda = await entrar(req, 'gestora@3t.com');
   await req('/catalogo/produtos', {
     metodo: 'POST', token: tRevenda, corpo: { nome: 'FS560', categoria: 'semente' },
@@ -316,4 +316,115 @@ test('quem não tem rede não recebe a comparação por franqueado', async () =>
   const r = await req(`/caderno/rede-contra-regiao?safra=${SAFRA}`, { token: tRevenda });
   assert.equal(r.status, 200);
   assert.deepEqual(r.corpo, [], 'a revenda não tem franqueados a comparar');
+});
+
+/* --------------------------------- a rede pelo WhatsApp da franqueadora */
+
+test('a franqueadora recebe a rede em poucas linhas, ordenada pela variação', async () => {
+  const ind = (await dono.query(
+    "select id from tenant where documento = '91000000000191'")).rows[0].id;
+  const tel = '5566999550099';
+  const canal = '5566999000900';
+  await dono.query('update usuario set telefone = $1 where tenant_id = $2', [tel, ind]);
+  await dono.query(
+    'insert into canal_whatsapp (tenant_id, numero) values ($1,$2) on conflict do nothing',
+    [ind, canal]);
+
+  const gw = (texto) => fetch(`${base}/captura/mensagens`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    body: JSON.stringify({ de: tel, para: canal, tipo: 'texto', texto }),
+  }).then((r) => r.json());
+
+  const r = await gw('como foi a safra?');
+  assert.equal(r.sobre, 'safra');
+
+  const saidas = await fetch(`${base}/captura/saidas`, {
+    headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+  }).then((x) => x.json());
+  const texto = saidas.at(-1).texto;
+
+  assert.match(texto, /^Safra 26\/27, a rede:/);
+  assert.match(texto, /FS Sorriso: .+ no território dele\./);
+  assert.match(texto, /Cada um contra o próprio território/);
+  // "incluindo quem não comprou da rede" é o que impede a linha de ser lida
+  // como se o denominador fosse só a rede dela.
+  assert.match(texto, /inclui quem não comprou da rede/);
+});
+
+test('franqueado com venda em território magro é contado, não sumido', async () => {
+  // Ele vendeu, então tem número; o território é que não tem cinco produtores.
+  // Sumir seria confundir "sem vizinhança" com "sem desempenho".
+  const magro = (await dono.query(
+    "select id from tenant where documento = '93000000000193'")).rows[0].id;
+  const p = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Sozinho de Água Boa' },
+  });
+  const f = await req('/cadastro/propriedades', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      nome: 'Fazenda Sozinha', produtorId: p.corpo.id,
+      municipio: 'Água Boa', uf: 'MT', areaHa: 600,
+    },
+  });
+  const ped = await req('/pedidos', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      numero: 'PED-AGUA-1', safra: SAFRA, produtorId: p.corpo.id,
+      propriedadeId: f.corpo.id, itens: [{ cultivar: 'FS560', quantidade: 50, precoUnit: 300 }],
+    },
+  });
+  assert.equal(ped.status, 201, JSON.stringify(ped.corpo));
+  const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba só', areaHa: 600 },
+  });
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId: t.corpo.id, safra: SAFRA, cultivar: 'FS560',
+      marca: 'FS Sementes', areaHa: 600,
+    },
+  });
+  await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+    metodo: 'POST', token: tRevenda,
+    corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 61 },
+  });
+  assert.ok(magro);
+
+  await fetch(`${base}/captura/mensagens`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    body: JSON.stringify({
+      de: '5566999550099', para: '5566999000900', tipo: 'texto', texto: 'como foi a safra?',
+    }),
+  });
+  const saidas = await fetch(`${base}/captura/saidas`, {
+    headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+  }).then((x) => x.json());
+  assert.match(saidas.at(-1).texto, /sem comparação ainda — território com pouca gente/);
+});
+
+test('quem não tem rede continua recebendo o resumo de sempre', async () => {
+  // A mesma pergunta, vinda de uma revenda, não vira lista de franqueados.
+  const tel = '5566999660077';
+  const revenda = (await dono.query(
+    "select tenant_id from usuario where email = 'gestora@3t.com'")).rows[0].tenant_id;
+  await dono.query('update usuario set telefone = $1 where email = $2',
+    [tel, 'gestora@3t.com']);
+  await dono.query(
+    'insert into canal_whatsapp (tenant_id, numero) values ($1,$2) on conflict do nothing',
+    [revenda, '5566999000901']);
+
+  await fetch(`${base}/captura/mensagens`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    body: JSON.stringify({ de: tel, para: '5566999000901', tipo: 'texto', texto: 'como foi a safra?' }),
+  });
+  const saidas = await fetch(`${base}/captura/saidas`, {
+    headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+  }).then((x) => x.json());
+  const texto = saidas.at(-1).texto;
+  assert.match(texto, /^Safra 26\/27:/);
+  assert.doesNotMatch(texto, /a rede:/,
+    'a condição é ter rede, não ser de um tipo — e ela não tem');
 });

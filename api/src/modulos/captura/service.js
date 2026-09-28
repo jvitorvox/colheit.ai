@@ -178,6 +178,15 @@ async function responderSobreSafra(ctx, texto) {
     return maiuscula(resumoDaSafra(r, linhaDoBenchmark(b, r)));
   }
 
+  // Quem tem REDE recebe a rede, cada franqueado contra o território dele. É o
+  // único recorte de carteira que cabe numa mensagem: são poucos franqueados, e
+  // a comparação já vem resolvida numa linha cada.
+  //
+  // A condição é ter rede, não ser de um tipo: `redeContraRegiao` devolve vazio
+  // para quem não tem, e a revenda cai no resumo de sempre.
+  const rede = await caderno.redeContraRegiao(ctx, r.safra);
+  if (rede.length) return respostaDaRede(r, rede);
+
   // A carteira dele sem nome nenhum não ganha comparação: ela atravessa
   // municípios, e a régua regional é por município — viraria uma lista, que é
   // relatório e não mensagem. Essa abertura existe no painel do gestor.
@@ -381,4 +390,44 @@ function linhaDoBenchmark(b, r) {
   const onde = b.nivel === 'município' ? b.municipio : b.uf;
   return `${dif > 0 ? '+' : ''}${n(dif)}% em relação a ${b.produtores} outros `
     + `produtores de ${onde} que estão aqui (${n(b.mediaPonderadaScHa)} sc/ha).`;
+}
+
+// Cinco franqueados numa mensagem já é o limite do que se lê num celular. Acima
+// disso vale dizer quantos ficaram de fora e mandar a pessoa para o painel, que
+// é onde a lista inteira cabe.
+const MAXIMO_NA_REDE = 5;
+
+/**
+ * A rede em poucas linhas, cada franqueado contra o TERRITÓRIO dele.
+ *
+ * O ranking cru entre franqueados decide pouco — territórios têm solo e clima
+ * diferentes, e quem está no topo pode apenas ter a melhor terra. Contra a
+ * própria região, o que sobra é o que depende de quem trabalha ali, e é isso
+ * que cabe numa mensagem.
+ *
+ * Ordenada pela variação e não pela produtividade: numa mensagem curta o que
+ * interessa é quem está fora da própria régua, para os dois lados.
+ */
+function respostaDaRede(r, rede) {
+  const n = (v) => Number(v).toLocaleString('pt-BR');
+  const comRegiao = rede.filter((f) => f.territorio)
+    .sort((a, b) => b.territorio.variacaoPct - a.territorio.variacaoPct);
+  const sem = rede.length - comRegiao.length;
+
+  const linhas = [`Safra ${r.safra}, a rede:`];
+  comRegiao.slice(0, MAXIMO_NA_REDE).forEach((f) => {
+    linhas.push(`${f.franqueado}: ${n(f.mediaPonderadaScHa)} sc/ha, `
+      + `${f.territorio.variacaoPct > 0 ? '+' : ''}${n(f.territorio.variacaoPct)}% `
+      + 'no território dele.');
+  });
+
+  const sobraram = comRegiao.length - MAXIMO_NA_REDE;
+  if (sobraram > 0) linhas.push(`E mais ${sobraram} no painel.`);
+  // Franqueado cujo território ainda não tem cinco produtores não some sem
+  // explicação: ele existe, e o que falta é vizinhança, não desempenho.
+  if (sem > 0) {
+    linhas.push(`${sem} sem comparação ainda — território com pouca gente aqui.`);
+  }
+  linhas.push('Cada um contra o próprio território, que inclui quem não comprou da rede.');
+  return linhas.join('\n');
 }
