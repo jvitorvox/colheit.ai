@@ -424,9 +424,12 @@ test('quem não tem rede continua recebendo o resumo de sempre', async () => {
     headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
   }).then((x) => x.json());
   const texto = saidas.at(-1).texto;
-  assert.match(texto, /^Safra 26\/27:/);
   assert.doesNotMatch(texto, /a rede:/,
     'a condição é ter rede, não ser de um tipo — e ela não tem');
+  // Ela cai no recorte seguinte, que é o dela: município a município. A ordem
+  // das quatro respostas é nome, rede, território, municípios.
+  assert.match(texto, /^Safra 26\/27, por município:/);
+  assert.match(texto, /A região inclui a sua carteira/);
 });
 
 /* ------------------------------- o território no WhatsApp do franqueado */
@@ -495,4 +498,110 @@ test('o produtor não alcança a rota de território — ela é da empresa', asy
   const r = await req(`/caderno/meu-territorio?safra=${SAFRA}`, { token: ent.corpo.token });
   assert.equal(r.status, 400);
   assert.match(r.corpo.erro, /área da empresa/);
+});
+
+/* ------------------------- os municípios no WhatsApp da distribuidora */
+
+test('a distribuidora recebe município a município, ordenado pela variação', async () => {
+  const tel = '5566999550066';
+  const canal = '5566999000803';
+  const revenda = (await dono.query(
+    "select tenant_id from usuario where email = 'gestora@3t.com'")).rows[0].tenant_id;
+  await dono.query('update usuario set telefone = $1 where email = $2',
+    [tel, 'gestora@3t.com']);
+  await dono.query(
+    'insert into canal_whatsapp (tenant_id, numero) values ($1,$2) on conflict (tenant_id) do update set numero = excluded.numero',
+    [revenda, canal]);
+
+  await fetch(`${base}/captura/mensagens`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    body: JSON.stringify({ de: tel, para: canal, tipo: 'texto', texto: 'como foi a safra?' }),
+  });
+  const saidas = await fetch(`${base}/captura/saidas`, {
+    headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+  }).then((x) => x.json());
+  const texto = saidas.at(-1).texto;
+  const linhas = texto.split('\n');
+
+  assert.match(linhas[0], /^Safra 26\/27, por município:/);
+  assert.match(texto, /Sorriso\/MT: .+ (na região|no estado)/);
+  // A decisão que separa o número dela do número do produtor: a região a inclui,
+  // porque ela controla a carteira e uma exclusão viraria alavanca.
+  assert.match(linhas.at(-1), /^A região inclui a sua carteira/);
+
+  const variacoes = linhas.slice(1)
+    .map((l) => l.match(/([+-]?[\d,]+)%/)?.[1])
+    .filter(Boolean)
+    .map((v) => Number(v.replace(',', '.')));
+  assert.deepEqual(variacoes, [...variacoes].sort((a, b) => b - a),
+    'quem está fora da própria régua vem primeiro, para os dois lados');
+});
+
+test('município que subiu para o estado diz que subiu', async () => {
+  // Sem isso, "+1,6%" num município magro seria lido como se fosse contra
+  // aquele município — que é outra coisa.
+  const r = await req(`/caderno/benchmark-por-municipio?safra=${SAFRA}`, { token: tRevenda });
+  const porEstado = r.corpo.find((m) => m.regiao?.nivel === 'estado');
+  if (porEstado) {
+    const saidas = await fetch(`${base}/captura/saidas`, {
+      headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    }).then((x) => x.json());
+    assert.match(saidas.at(-1).texto, new RegExp(`${porEstado.municipio}.+no estado`));
+  }
+});
+
+test('a ordem das quatro respostas: nome, rede, território, municípios', async () => {
+  // Um nome no texto ganha de tudo — inclusive de quem tem rede ou território.
+  // O produtor precisa estar em Sorriso e ter pedido, senão o franqueado FS
+  // Sorriso não o alcança pela visibilidade descendente.
+  const p = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Waldemar Bortoluzzi' },
+  });
+  const f = await req('/cadastro/propriedades', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      nome: 'Fazenda Bortoluzzi', produtorId: p.corpo.id,
+      municipio: 'Sorriso', uf: 'MT', areaHa: 500,
+    },
+  });
+  const ped = await req('/pedidos', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      numero: 'PED-ORDEM-1', safra: SAFRA, produtorId: p.corpo.id,
+      propriedadeId: f.corpo.id, itens: [{ cultivar: 'FS560', quantidade: 60, precoUnit: 300 }],
+    },
+  });
+  assert.equal(ped.status, 201, JSON.stringify(ped.corpo));
+  const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba do Waldemar', areaHa: 500 },
+  });
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId: t.corpo.id, safra: SAFRA, cultivar: 'FS560',
+      marca: 'FS Sementes', areaHa: 500,
+    },
+  });
+  await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+    metodo: 'POST', token: tRevenda,
+    corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 72 },
+  });
+  const b = { nome: 'Waldemar Bortoluzzi' };
+
+  await fetch(`${base}/captura/mensagens`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    body: JSON.stringify({
+      de: '5566999550088', para: '5566999000801', tipo: 'texto',
+      texto: 'como foi a safra do Bortoluzzi?',
+    }),
+  });
+  const saidas = await fetch(`${base}/captura/saidas`, {
+    headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+  }).then((x) => x.json());
+  const texto = saidas.at(-1).texto;
+  assert.match(texto, new RegExp(`^${b.nome} —`),
+    'o franqueado tem território, mas o nome no texto vem antes');
+  assert.doesNotMatch(texto, /seu território inteiro/);
 });

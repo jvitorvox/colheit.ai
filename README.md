@@ -366,9 +366,9 @@ revela nada novo** — a diferença entre as duas consultas mistura as lavouras 
 Cesar e da Marli, e ele já vê as duas. Excluir só quem se consulta é o que
 mantém a régua honesta sem virar alavanca.
 
-**A carteira sem nome não ganha comparação.** Ela atravessa municípios, e a régua
-regional é por município: viraria uma lista, que é relatório e não mensagem. Essa
-abertura existe no painel do gestor.
+**Sem nome, a resposta depende do que o tenant é dono.** Rede, território ou
+municípios — nas três, a comparação já vem resolvida numa linha cada, e o que
+não cabe numa mensagem é lista longa, não lista.
 
 ### Quem tem rede recebe a rede
 
@@ -428,20 +428,37 @@ Mesma disciplina das outras: a condição é `territorio` ter linha apontando pa
 o tenant. Revenda, distribuidora e franqueadora não têm, e a função no banco
 simplesmente não devolve nada.
 
-### As três ordens da mesma pergunta
+### As quatro ordens da mesma pergunta
 
-"Como foi a safra?" tem três respostas para a sessão de empresa, nesta ordem:
+```
+> como foi a safra?          [distribuidora]
+Safra 26/27, por município:
+Sorriso/MT: 69,5 sc/ha, +9,1% na região.
+Água Boa/MT: 63,5 sc/ha, +1,6% no estado (MT).
+Sinop/MT: 53,2 sc/ha, -12,9% na região.
+A região inclui a sua carteira, e só aparece com cinco produtores.
+```
+
+"Como foi a safra?" tem **cinco** respostas para a sessão de empresa, nesta
+ordem:
 
 | Se o texto traz | Resposta |
 |---|---|
 | um **nome de produtor** | a lavoura dele, com a vizinhança dele |
 | nada, e o tenant tem **rede** | cada franqueado contra o território dele |
 | nada, e o tenant tem **território** | o que desceu dele contra o território inteiro |
-| nada, e nenhum dos dois | o resumo da carteira, sem comparação |
+| nada, e há **município com região** | município a município, com a região de cada um |
+| nada disso | o resumo da carteira, sem comparação |
 
-Nenhuma dessas condições olha o tipo do tenant. Todas olham se existe o dado —
-que é o que mantém as quatro num arquivo só, sem uma segunda regra de
-visibilidade para manter em dia com a política.
+**Nenhuma dessas condições olha o tipo do tenant.** Todas olham se o dado existe
+— é o que mantém as cinco num arquivo só, sem uma segunda regra de visibilidade
+para manter em dia com a política. Há teste conferindo que um nome no texto ganha
+até de quem tem território.
+
+As duas listas — rede e municípios — ordenam **pela variação e não pela
+produtividade**: numa mensagem curta o que interessa é quem está fora da própria
+régua, para os dois lados. E o município que subiu para o estado **diz que
+subiu**, senão "+1,6%" seria lido como se fosse contra aquela cidade.
 
 Três desfechos, porque é o que a realidade tem: **um nome** responde por ele,
 **mais de um** devolve a lista e pede o nome mais completo, e **nenhum** vale a

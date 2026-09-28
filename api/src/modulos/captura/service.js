@@ -194,6 +194,15 @@ async function responderSobreSafra(ctx, texto) {
   const meu = await caderno.benchmarkDoMeuTerritorio(ctx, r.safra);
   if (meu) return maiuscula(resumoDaSafra(r, linhaDoTerritorio(meu, r)));
 
+  // Quem vende em vários municípios e não tem rede nem território recebe os
+  // municípios — é a distribuidora, e o recorte é o mesmo do painel dela.
+  //
+  // Eu havia escrito que carteira não cabe em mensagem porque viraria lista. A
+  // frase era forte demais: o que não cabe é lista LONGA, e isso se resolve com
+  // teto. Poucos municípios, uma linha cada, e a comparação já vem resolvida.
+  const municipios = await caderno.benchmarkPorMunicipio(ctx, r.safra);
+  if (municipios.some((m) => m.regiao)) return respostaPorMunicipio(r, municipios);
+
   // A carteira dele sem nome nenhum não ganha comparação: ela atravessa
   // municípios, e a régua regional é por município — viraria uma lista, que é
   // relatório e não mensagem. Essa abertura existe no painel do gestor.
@@ -456,4 +465,39 @@ function linhaDoTerritorio(t, r) {
   return `${dif > 0 ? '+' : ''}${n(dif)}% em relação ao seu território inteiro `
     + `(${n(t.mediaPonderadaScHa)} sc/ha).`
     + `\nSão ${t.produtores} produtores em ${municipios}, incluindo quem não comprou de você.`;
+}
+
+/**
+ * A carteira município a município, com a região de cada um ao lado.
+ *
+ * Ordenada pela variação, como a rede: numa mensagem curta o que interessa é
+ * onde ela está fora da própria régua, para os dois lados. O município onde ela
+ * vai bem e o onde vai mal são os dois que mudam a semana dela; o meio não.
+ *
+ * "A região inclui a sua carteira" fecha a mensagem porque é a decisão que
+ * torna o número dela diferente do número do produtor — e sem dizer isso, ela
+ * leria a comparação como se fosse contra o concorrente.
+ */
+function respostaPorMunicipio(r, lista) {
+  const n = (v) => Number(v).toLocaleString('pt-BR');
+  const comRegiao = lista.filter((m) => m.regiao)
+    .sort((a, b) => b.regiao.variacaoPct - a.regiao.variacaoPct);
+  const sem = lista.length - comRegiao.length;
+
+  const linhas = [`Safra ${r.safra}, por município:`];
+  comRegiao.slice(0, MAXIMO_NA_REDE).forEach((m) => {
+    linhas.push(`${m.municipio}/${m.uf}: ${n(m.minhaMediaScHa)} sc/ha, `
+      + `${m.regiao.variacaoPct > 0 ? '+' : ''}${n(m.regiao.variacaoPct)}% `
+      // O nível tem de aparecer: quando o município não fecha o piso a régua
+      // sobe para o estado, e "+2,4%" seria lido como se fosse contra a cidade.
+      + `${m.regiao.nivel === 'município' ? 'na região' : `no estado (${m.uf})`}.`);
+  });
+
+  const sobraram = comRegiao.length - MAXIMO_NA_REDE;
+  if (sobraram > 0) linhas.push(`E mais ${sobraram} no painel.`);
+  if (sem > 0) {
+    linhas.push(`${sem} sem comparação ainda — pouca gente aqui por lá.`);
+  }
+  linhas.push('A região inclui a sua carteira, e só aparece com cinco produtores.');
+  return linhas.join('\n');
 }
