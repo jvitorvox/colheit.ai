@@ -5,7 +5,7 @@
 // não depende de quem chama, porque ela mora dentro da função do banco.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { encerrar } from '../api/src/db.js';
+import { dono, encerrar } from '../api/src/db.js';
 import { comContexto } from '../api/src/contexto.js';
 import { migrar } from '../api/src/migrar.js';
 import { subirApi, criarTenant, criarUsuario, entrar, limparBase } from './ajuda.js';
@@ -240,4 +240,80 @@ test('a rota é da empresa — o produtor tem a dele, com outra exclusão', asyn
   assert.equal(r.status, 400);
   assert.match(r.corpo.erro, /área da empresa/);
   assert.ok(b);
+});
+
+/* --------------------------------- a rede contra o território de cada um */
+
+test('o franqueado é comparado com a região DELE, não com o outro franqueado', async () => {
+  // Ranking entre franqueados carrega uma ressalva que o torna quase inútil
+  // sozinho: quem está no topo pode apenas ter a melhor terra. Contra o próprio
+  // território, o terroir sai da conta.
+  const ind = await criarTenant('Indústria FS', '91000000000191', 'franqueadora');
+  await criarUsuario(ind, 'Diretor', 'diretor@fs.com', 'gestor');
+  const tInd = await entrar(req, 'diretor@fs.com');
+  const fq = await criarTenant('FS Sorriso', '92000000000192', 'franqueado');
+  await dono.query('insert into rede (franqueado_id, franqueadora_id) values ($1,$2)', [fq, ind]);
+  await dono.query(
+    'insert into territorio (municipio, uf, franqueado_id) values ($1,$2,$3)',
+    ['Sorriso', 'MT', fq]);
+
+  // Um pedido carimba o território e faz a lavoura descer para a rede.
+  const b = quem('Produtor B');
+  await req('/catalogo/produtos', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'FS560', categoria: 'semente' },
+  });
+  const prop = (await req('/cadastro/propriedades', { token: tRevenda })).corpo
+    .find((x) => x.nome === 'Fazenda Produtor B');
+  const ped = await req('/pedidos', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      numero: 'PED-REDE-1', safra: SAFRA, produtorId: b.id, propriedadeId: prop.id,
+      itens: [{ cultivar: 'FS560', quantidade: 100, precoUnit: 300 }],
+    },
+  });
+  assert.equal(ped.status, 201, JSON.stringify(ped.corpo));
+
+  const r = await req(`/caderno/rede-contra-regiao?safra=${SAFRA}`, { token: tInd });
+  assert.equal(r.status, 200);
+  const linha = r.corpo.find((x) => x.franqueado === 'FS Sorriso');
+  assert.ok(linha, 'a rede dela tem esse franqueado');
+  assert.ok(linha.territorio, 'e Sorriso tem gente bastante');
+  assert.equal(linha.territorio.municipios, 1);
+  assert.ok(linha.territorio.produtores >= 5);
+  assert.match(linha.territorio.base, /incluindo quem não comprou da rede/);
+  // O Produtor B fez 80 num território que faz menos: a variação é positiva.
+  assert.equal(linha.mediaPonderadaScHa, 80);
+  assert.ok(linha.territorio.variacaoPct > 0);
+});
+
+test('o território inclui quem não comprou da rede — é o ponto', async () => {
+  const tInd = await entrar(req, 'diretor@fs.com');
+  const r = await req(`/caderno/rede-contra-regiao?safra=${SAFRA}`, { token: tInd });
+  const linha = r.corpo.find((x) => x.franqueado === 'FS Sorriso');
+  // A franqueadora enxerga UMA lavoura pela rede dela, e o território tem
+  // muitas: o denominador vem da função, não do que ela alcança.
+  assert.equal(linha.talhoes, 1);
+  assert.ok(linha.territorio.produtores > 1);
+});
+
+test('o piso vale no território como vale no município', async () => {
+  const ind = (await dono.query(
+    "select id from tenant where documento = '91000000000191'")).rows[0].id;
+  const magro = await criarTenant('FS Deserto', '93000000000193', 'franqueado');
+  await dono.query('insert into rede (franqueado_id, franqueadora_id) values ($1,$2)',
+    [magro, ind]);
+  await dono.query(
+    'insert into territorio (municipio, uf, franqueado_id) values ($1,$2,$3)',
+    ['Água Boa', 'MT', magro]);
+
+  const r = await comContexto({ tenant: null }, (cx) =>
+    cx.query('select * from app.benchmark_do_territorio($1,$2)', [SAFRA, magro])
+      .then((x) => x.rows[0] ?? null));
+  assert.equal(r, null, 'território sem cinco produtores não devolve média');
+});
+
+test('quem não tem rede não recebe a comparação por franqueado', async () => {
+  const r = await req(`/caderno/rede-contra-regiao?safra=${SAFRA}`, { token: tRevenda });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.corpo, [], 'a revenda não tem franqueados a comparar');
 });

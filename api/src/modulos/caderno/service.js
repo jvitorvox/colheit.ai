@@ -283,6 +283,51 @@ export function safraPorFranqueado(ctx, safra) {
 }
 
 /**
+ * Cada franqueado contra a região DELE.
+ *
+ * O ranking entre franqueados carrega uma ressalva que o torna quase inútil
+ * sozinho — territórios diferentes têm solo, clima e manejo diferentes, e quem
+ * está no topo pode apenas ter a melhor terra. Comparar cada um com o próprio
+ * território é o que tira o terroir da conta: 47 num território que faz 55 está
+ * atrás de 69 num que faz 65, mesmo com vinte sacos de diferença entre os dois.
+ *
+ * Ninguém é excluído do território. A franqueadora não controla quem planta num
+ * município — o que ela controla é a rede, e a rede não entra no recorte, então
+ * não há alavanca de diferenciação como a do painel do gestor.
+ */
+export function redeContraRegiao(ctx, safra) {
+  return comContexto(ctx, async (cx) => {
+    const escolhida = safra
+      ? textoObrigatorio(safra, 'safra', 10)
+      : (await repo.mediaPorSafra(cx))[0]?.safra;
+    if (!escolhida) return [];
+
+    const rede = await repo.safraPorFranqueado(cx, escolhida);
+    return Promise.all(rede.map(async (l) => {
+      const minha = numeroOuNulo(l.media_ponderada_sc_ha);
+      const b = await repo.benchmarkDoTerritorio(cx, escolhida, l.franqueado_id);
+      const regiao = b ? Number(b.media_ponderada_sc_ha) : null;
+      return {
+        franqueadoId: l.franqueado_id,
+        franqueado: l.franqueado,
+        talhoes: l.talhoes,
+        colhidos: l.colhidos,
+        areaColhidaHa: Number(l.area_colhida_ha),
+        mediaPonderadaScHa: minha,
+        territorio: !b || minha === null ? null : {
+          produtores: b.produtores,
+          municipios: b.municipios,
+          mediaPonderadaScHa: regiao,
+          variacaoPct: Number(((minha / regiao - 1) * 100).toFixed(1)),
+          base: `média de ${b.produtores} produtores em ${b.municipios} município(s) `
+            + 'do território, incluindo quem não comprou da rede',
+        },
+      };
+    }));
+  });
+}
+
+/**
  * A safra por município — o recorte de quem vende em mais de um território.
  *
  * A distribuidora compra de vários franqueados e não tem rede a comparar; o que

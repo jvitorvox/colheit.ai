@@ -1159,9 +1159,40 @@ em nenhuma outra tela: qual franqueado está entregando lavoura melhor. Aparece
 quando há mais de um — não por tipo de tenant, mas porque quem enxerga um só não
 tem comparação a fazer.
 
-E ele carrega a ressalva junto, como todos os outros: *territórios diferentes,
-com solo, clima e manejo diferentes — quem está no topo pode apenas ter a melhor
-terra.*
+### E a ressalva que tornava o ranking quase inútil
+
+O cartão nascia dizendo *"territórios diferentes, com solo, clima e manejo
+diferentes — quem está no topo pode apenas ter a melhor terra"*. A ressalva é
+verdadeira, e por isso o ranking sozinho decidia pouco.
+
+**Comparar cada franqueado com o território DELE** tira o terroir da conta:
+
+```
+A REDE, CADA UM CONTRA O TERRITÓRIO DELE
+FS Mato Grosso  ██████████████▕  +6,3%
+  69,4 sc/ha em 3.400 ha · território: 65,3 sc/ha em 2 município(s)
+FS Bahia        █████████▕       -9,6%
+  47 sc/ha em 3.500 ha · território: 52 sc/ha em 2 município(s)
+Cada um comparado com o próprio território, que inclui quem não
+comprou da rede. Assim o solo e o clima saem da conta, e o que
+sobra é o que depende de quem trabalha ali.
+```
+
+O ranking cru dizia que Mato Grosso estava 22 sacas à frente da Bahia. O honesto
+diz que **Mato Grosso está à frente da própria região e a Bahia está atrás da
+dela** — que é o fato sobre o qual ela pode agir.
+
+`app.benchmark_do_territorio` segue a mesma disciplina da 032: `security
+definer`, agregado só, e o piso de `app.benchmark_minimo()` dentro da função. O
+território vem de `territorio`, que já é público.
+
+**Ninguém é excluído do território**, e aí não há alavanca: ela não controla quem
+planta num município. O que ela controla é a **rede**, e a rede não entra no
+recorte — ao contrário do painel do gestor, onde a carteira entraria.
+
+O denominador vem da função, não do que ela alcança: no teste ela enxerga **uma**
+lavoura pela rede e o território tem muitas. É esse o ponto — comparar o que ela
+vendeu com tudo que foi plantado ali, inclusive pelo concorrente.
 
 ### E a distribuidora, que compra de vários
 
@@ -1232,6 +1263,7 @@ GET  /caderno/resultado             o fechamento da safra, ponderado pela área
                                     (?produtorId= para um produtor só)
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/resultado-por-franqueado  a safra de cada franqueado da rede
+GET  /caderno/rede-contra-regiao    cada franqueado contra o território dele
 GET  /caderno/resultado-por-municipio   a safra por região, sem nomear franqueado
 GET  /caderno/benchmark             a região do produtor, com ele de FORA
 GET  /caderno/benchmark-por-municipio  a carteira contra a região, ela INCLUÍDA

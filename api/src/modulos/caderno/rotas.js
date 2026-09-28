@@ -74,3 +74,8 @@ rotasCaderno.get('/benchmark', rota(async (req, res) => {
 rotasCaderno.get('/benchmark-por-municipio', soEmpresa, rota(async (req, res) => {
   res.json(await servico.benchmarkPorMunicipio(req.ctx, req.query.safra));
 }));
+
+// Cada franqueado contra a região dele. Vazio para quem não tem rede.
+rotasCaderno.get('/rede-contra-regiao', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.redeContraRegiao(req.ctx, req.query.safra));
+}));

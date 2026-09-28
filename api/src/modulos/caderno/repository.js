@@ -349,3 +349,10 @@ export async function benchmarkRegional(cx, safra, municipio, uf, excluir) {
     'select * from app.benchmark_regional($1,$2,$3,$4)', [safra, municipio, uf, excluir]);
   return rows[0] ?? null;
 }
+
+/** A safra inteira do território de um franqueado. Agregado, com piso. */
+export async function benchmarkDoTerritorio(cx, safra, franqueadoId) {
+  const { rows } = await cx.query(
+    'select * from app.benchmark_do_territorio($1,$2)', [safra, franqueadoId]);
+  return rows[0] ?? null;
+}

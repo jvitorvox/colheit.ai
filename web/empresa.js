@@ -298,10 +298,12 @@ function cartaoGargalo(op) {
  */
 function cartaoRede(rede) {
   const c = el('div', 'cartao');
-  c.append(el('p', 'rotulo', 'A rede, por franqueado'));
+  const comRegiao = rede.some((f) => f.territorio);
+  c.append(el('p', 'rotulo',
+    comRegiao ? 'A rede, cada um contra o território dele' : 'A rede, por franqueado'));
 
-  const comNumero = rede.filter((f) => f.mediaPonderadaScHa !== null);
-  const maior = Math.max(1, ...comNumero.map((f) => f.mediaPonderadaScHa));
+  const maior = Math.max(1, ...rede.map((f) => Math.max(
+    f.mediaPonderadaScHa ?? 0, f.territorio?.mediaPonderadaScHa ?? 0)));
 
   rede.forEach((f) => {
     const l = el('div', 'faixa-etapa');
@@ -311,18 +313,36 @@ function cartaoRede(rede) {
       barra.style.width = `${(f.mediaPonderadaScHa / maior) * 100}%`;
       medidor.append(barra);
     }
+    // O traço é o território dele, não a média da rede: é contra a própria
+    // região que o desempenho de cada um se lê.
+    if (f.territorio) {
+      const marca = el('b');
+      marca.style.left = `${(f.territorio.mediaPonderadaScHa / maior) * 100}%`;
+      marca.title = `território: ${num(f.territorio.mediaPonderadaScHa)} sc/ha`;
+      medidor.append(marca);
+    }
     l.append(el('span', null, f.franqueado), medidor,
-      el('span', 'num', f.mediaPonderadaScHa === null
-        ? 'sem colheita'
-        : `${num(f.mediaPonderadaScHa)} sc/ha`));
+      el('span', 'num', f.territorio
+        ? `${f.territorio.variacaoPct > 0 ? '+' : ''}${num(f.territorio.variacaoPct)}%`
+        : (f.mediaPonderadaScHa === null ? 'sem colheita' : `${num(f.mediaPonderadaScHa)} sc/ha`)));
     c.append(l);
     c.append(el('p', 'detalhe',
-      `${num(f.areaColhidaHa)} ha colhidos · ${f.colhidos} de ${f.talhoes} talhões`));
+      `${num(f.mediaPonderadaScHa ?? 0)} sc/ha em ${num(f.areaColhidaHa)} ha`
+      + (f.territorio
+        ? ` · território: ${num(f.territorio.mediaPonderadaScHa)} sc/ha `
+          + `em ${f.territorio.municipios} município(s)`
+        : '')));
   });
 
-  c.append(el('p', 'detalhe',
-    'Territórios diferentes, com solo, clima e manejo diferentes — quem está no '
-    + 'topo pode apenas ter a melhor terra.'));
+  c.append(el('p', 'detalhe', comRegiao
+    // A ressalva muda de conteúdo quando o número muda de sentido: comparados
+    // com o próprio território, o terroir sai da conta — o que sobra é manejo,
+    // escolha de cultivar e acompanhamento.
+    ? 'Cada um comparado com o próprio território, que inclui quem não comprou '
+      + 'da rede. Assim o solo e o clima saem da conta, e o que sobra é o que '
+      + 'depende de quem trabalha ali.'
+    : 'Territórios diferentes, com solo, clima e manejo diferentes — quem está '
+      + 'no topo pode apenas ter a melhor terra.'));
   return c;
 }
 

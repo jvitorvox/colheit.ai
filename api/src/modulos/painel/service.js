@@ -67,7 +67,7 @@ export async function montar(ctx, { safra } = {}) {
       captura.relatos(ctx, { situacao: 'pendente' }),
       caderno.resultadoDaSafra(ctx, escolhida),
       caderno.resultadoPorOrigem(ctx, escolhida),
-      caderno.safraPorFranqueado(ctx, escolhida),
+      caderno.redeContraRegiao(ctx, escolhida),
       caderno.benchmarkPorMunicipio(ctx, escolhida),
     ]);
 
