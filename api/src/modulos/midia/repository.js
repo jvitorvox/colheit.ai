@@ -27,3 +27,17 @@ export async function listarDoTenant(cx) {
     'select id, tipo, mime, bytes, criado_em from midia order by criado_em desc limit 200');
   return rows;
 }
+
+/**
+ * Carimba o produtor só onde ainda não há um.
+ *
+ * `produtor_id is null` no where não é zelo: sem ele, pendurar a mesma foto
+ * numa segunda visita moveria a foto de um produtor para outro — e o primeiro
+ * deixaria de ver o que já via no portal dele.
+ */
+export async function atribuirAoProdutor(cx, ids, produtorId) {
+  const { rowCount } = await cx.query(
+    'update midia set produtor_id = $2 where id = any($1::uuid[]) and produtor_id is null',
+    [ids, produtorId]);
+  return rowCount;
+}

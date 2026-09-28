@@ -70,6 +70,20 @@ body{padding:0 0 calc(76px + env(safe-area-inset-bottom))}
 .sinal.offline{background:var(--sol-suave);border:1px solid var(--sol);color:var(--sol-tinta)}
 .sinal.erro{background:var(--alerta-suave);border:1px solid var(--alerta);color:var(--alerta)}
 
+/* Miniaturas do que foi fotografado. Quadradas e recortadas: o que interessa é
+   reconhecer a foto, não enquadrá-la. */
+.galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.galeria:not(:empty){margin-bottom:10px}
+.miniatura{position:relative;aspect-ratio:1;border-radius:11px;overflow:hidden;
+  border:1px solid var(--linha);background:var(--papel-2)}
+.miniatura img{width:100%;height:100%;object-fit:cover;display:block}
+/* Já subiu: some a borda de espera. É o retorno visual de que o binário foi. */
+.miniatura.subiu{border-color:var(--marca)}
+.miniatura .tirar{position:absolute;top:4px;right:4px;width:28px;height:28px;
+  border:none;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;
+  font-size:17px;line-height:1;padding:0}
+.botao.vazado{width:100%;padding:14px;font-size:1rem}
+
 textarea{min-height:88px}
 input,textarea,select{font-size:1rem}
 </style>

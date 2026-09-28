@@ -46,13 +46,19 @@ export async function buscar(cx, id) {
 export async function listar(cx, { produtorId, desde } = {}) {
   const { rows } = await cx.query(`
     select v.id, v.em, v.canal, v.duracao_seg, v.estagio, v.estande, v.observacao,
-           p.nome as produtor, u.nome as consultor, t.nome as talhao
+           p.nome as produtor, u.nome as consultor, t.nome as talhao,
+           -- Os ids das fotos, não a contagem: a lista já monta as miniaturas
+           -- sem uma segunda ida ao servidor por visita.
+           coalesce(array_agg(vm.midia_id order by vm.ordem)
+                    filter (where vm.midia_id is not null), '{}') as fotos
       from visita v
       join produtor p on p.id = v.produtor_id
       left join usuario u on u.id = v.usuario_id
       left join talhao t on t.id = v.talhao_id
+      left join visita_midia vm on vm.visita_id = v.id
      where ($1::uuid is null or v.produtor_id = $1)
        and ($2::timestamptz is null or v.em >= $2)
+     group by v.id, p.nome, u.nome, t.nome
      order by v.em desc
      limit 200`, [produtorId ?? null, desde ?? null]);
   return rows;
@@ -87,5 +93,28 @@ export async function medicaoH1(cx, dias) {
      where em >= now() - make_interval(days => $1)
      group by canal
      order by canal`, [dias]);
+  return rows;
+}
+
+/**
+ * Pendura as fotos na visita.
+ *
+ * `on conflict do nothing` porque o reenvio é o normal deste caminho: a mesma
+ * visita com as mesmas fotos chega de novo quando o sinal cai no meio do envio,
+ * e a chave primária do par já diz que o vínculo é um só.
+ */
+export async function vincularMidia(cx, visitaId, midiaIds) {
+  await cx.query(`
+    insert into visita_midia (visita_id, midia_id, ordem)
+    select $1, m.id, m.ord from unnest($2::uuid[]) with ordinality as m(id, ord)
+    on conflict do nothing`, [visitaId, midiaIds]);
+}
+
+export async function midiaDaVisita(cx, visitaId) {
+  const { rows } = await cx.query(`
+    select m.id, m.mime, m.bytes, vm.ordem
+      from visita_midia vm join midia m on m.id = vm.midia_id
+     where vm.visita_id = $1
+     order by vm.ordem`, [visitaId]);
   return rows;
 }

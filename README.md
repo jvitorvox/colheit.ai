@@ -447,6 +447,51 @@ A fila do dia vem do cache quando não há rede, e a tela **diz** que é lista
 guardada. Fila de ontem passando por fila de hoje é pior que fila nenhuma: o
 consultor dirige até um produtor que o colega já visitou.
 
+### A foto do talhão
+
+É a única parte do registro que o texto não substitui. "Estande irregular na
+bordadura" e a foto da bordadura irregular não são o mesmo dado — e é a foto que
+o agrônomo da revenda consegue julgar sem ter ido.
+
+```
+câmera → encolhida no aparelho → fila local (com a visita)
+       → POST /midia  (uma vez, foto a foto)
+       → POST /visitas com os identificadores
+```
+
+**Encolher no aparelho é o que faz a coisa existir.** Foto de celular tem 3 a
+8 MB; a 1600px e qualidade 0,72 ela cai para ~250 KB e continua dando para ver
+lagarta na folha. Numa conexão de fazenda, é a diferença entre subir e não subir.
+`imageOrientation: 'from-image'` não é detalhe: sem isso a foto tirada de pé
+chega deitada, porque o celular grava a rotação no EXIF em vez de girar os pixels.
+
+**O binário sobe uma vez.** O progresso é gravado foto a foto de volta na fila
+local, então cair o sinal na terceira não faz a próxima tentativa remandar as
+duas primeiras. E o reenvio da visita carrega identificadores, não arquivos.
+
+**A foto sobe sem dono.** `POST /midia` não aceita `produtorId`: quem carimba é o
+vínculo com a visita, onde o produtor já foi conferido contra a carteira. Aceitar
+na subida deixaria pendurar foto na lavoura de um produtor alheio. O carimbo só
+preenche o que está vazio — remarcar moveria a foto de um produtor para outro, e
+o primeiro deixaria de ver no portal o que já via.
+
+É esse carimbo que faz a foto aparecer para o produtor: a lavoura é dele, e a
+foto dela também. Vale a mesma régua da visita — o que o consultor anota como
+avaliação comercial não mora aqui.
+
+**Tudo é idempotente, e o vínculo roda também no reenvio.** Se o sinal caiu entre
+gravar a visita e pendurar as fotos, a segunda tentativa é a única chance de
+completar: `visita.cliente_id` devolve a mesma visita, a chave primária de
+`visita_midia` absorve o vínculo repetido, e o sha256 por tenant reaproveita o
+binário. Há teste para exatamente esse meio-caminho.
+
+Seis fotos por visita, no cliente e no servidor. Mais que isso é álbum, e cada
+foto é uma subida a mais numa conexão que já está ruim.
+
+As fotos aparecem em **Visitas**, no console — foto que ninguém vê não valia ter
+sido tirada. No portal do produtor ainda não: ele não tem tela de visitas, e ela
+é trabalho à parte.
+
 ### O que ficou de fora, e por quê
 
 **Background Sync.** O reenvio mora na página, não no service worker. Levá-lo
@@ -454,8 +499,9 @@ para lá significaria guardar o token de sessão onde o botão Sair não alcanç
 consultor volta ao sinal com o app aberto ou reabre o app, e o escoamento roda
 nos dois casos — além de no evento `online`.
 
-**Foto e áudio.** Já existem, pelo WhatsApp, com armazenamento e política. Pôr
-uma segunda porta aqui só afastaria o formulário dos 60 segundos.
+**Áudio.** Continua só pelo WhatsApp, onde já tem armazenamento, política e
+extração. Gravar áudio aqui seria uma segunda porta para o mesmo dado, e o
+formulário se afastaria dos 60 segundos sem ganhar nada.
 
 Cada app tem seu service worker: `sw.js` para o portal (leitura e push),
 `consultor-sw.js` para o campo (casca e fila do dia). Dois mexendo no mesmo
@@ -753,16 +799,20 @@ projeto captura. Ele não fica em disco de contêiner, e **nunca** tem URL
 pública.
 
 ```
-gateway  --(bytes crus)-->  POST /captura/midia  -->  armazém
-                                    |
-                              tabela `midia` (tenant, produtor, política)
-                                    |
+gateway        --(bytes crus)-->  POST /captura/midia  -->  armazém
+app do campo   --(bytes crus)-->  POST /midia                  |
+                                          |             tabela `midia`
+                                          +-------------  (tenant, produtor,
+                                                            política)
+                                                               |
 navegador  <--(blob)--  GET /midia/:id  <-- a política decide antes do byte sair
 ```
 
-O gateway não diz de quem é o arquivo: manda o canal e o remetente, e a API
-resolve o tenant pelo canal e o produtor pelo telefone. Assim ele não guarda
-nada em nome de quem não deve.
+Duas portas de entrada, uma implementação. O **gateway** não diz de quem é o
+arquivo: manda o canal e o remetente, e a API resolve o tenant pelo canal e o
+produtor pelo telefone. O **app do campo** entra pela sessão, e aí o tenant vem
+do contexto e a política confere o carimbo no `with check`. Nenhum dos dois
+escolhe em nome de quem guarda.
 
 ### Dois armazéns atrás da mesma porta
 

@@ -50,6 +50,14 @@ button{font:inherit;cursor:pointer}
 .obs{font-size:.8125rem;color:var(--tinta-3);padding:2px 0 6px}
 .vazio{color:var(--tinta-3);text-align:center;padding:40px 20px}
 
+/* Miniaturas do campo, quadradas e recortadas: o que interessa é reconhecer a
+   foto na lista; ver de perto é outro gesto. */
+.galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;
+  padding:4px 0 8px}
+.miniatura{aspect-ratio:1;border-radius:11px;overflow:hidden;border:1px solid var(--linha);
+  background:var(--papel-2)}
+.miniatura img{width:100%;height:100%;object-fit:cover;display:block}
+
 /* Anexo do campo: o áudio ocupa a largura, a foto para antes de dominar a tela. */
 .midia{padding:6px 0}
 .midia audio{width:100%;height:36px}

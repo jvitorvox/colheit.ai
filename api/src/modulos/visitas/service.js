@@ -1,6 +1,7 @@
 import { comContexto } from '../../contexto.js';
 import { ErroDeUso, NaoEncontrado } from '../../http/erros.js';
 import * as repo from './repository.js';
+import * as midia from '../midia/service.js';
 import { textoObrigatorio, umDe, uuidValido, areaValida } from '../cadastro/validar.js';
 
 // O corte que o bench encontrou no concorrente e que a planilha de origem já
@@ -10,6 +11,10 @@ export const DIAS_DE_ALERTA = 15;
 // Acima disto não é registro de visita, é aba esquecida aberta. Guardar o
 // número seria envenenar a mediana que decide o produto.
 const DURACAO_MAXIMA_SEG = 60 * 30;
+
+// Bordadura, meio do talhão, praga de perto. Mais que isso não é registro de
+// visita: é álbum, e cada foto é uma subida a mais numa conexão de fazenda.
+const MAXIMO_FOTOS = 6;
 
 export function registrar(ctx, corpo = {}) {
   const v = {
@@ -28,6 +33,14 @@ export function registrar(ctx, corpo = {}) {
     clienteId: corpo.clienteId ? uuidValido(corpo.clienteId, 'clienteId') : null,
   };
 
+  // As fotos do talhão, já guardadas por POST /midia antes de chegar aqui. O
+  // aplicativo sobe primeiro e manda os identificadores junto com a visita:
+  // assim o reenvio não carrega o binário de novo.
+  const midiaIds = (corpo.midiaIds ?? []).map((id, i) => uuidValido(id, `midiaIds[${i}]`));
+  if (midiaIds.length > MAXIMO_FOTOS) {
+    throw new ErroDeUso(`no máximo ${MAXIMO_FOTOS} fotos por visita`, 'midiaIds');
+  }
+
   return comContexto(ctx, async (cx) => {
     if (!(await repo.produtorNaCarteira(cx, v.produtorId))) {
       throw new ErroDeUso('produtor não está na carteira desta empresa', 'produtorId');
@@ -37,11 +50,25 @@ export function registrar(ctx, corpo = {}) {
     // no meio do POST, a resposta não chega, e o aplicativo tenta de novo sem
     // ter como saber se gravou. Devolver a visita que já existe é o que impede
     // uma visita de virar três registros de dez segundos na mediana da H1.
-    const id = await repo.registrar(cx, v);
-    if (id) return { ...(await repo.buscar(cx, id)), repetida: false };
+    const novo = await repo.registrar(cx, v);
+    const id = novo ?? await repo.porClienteId(cx, v.clienteId);
 
-    const jaGravada = await repo.porClienteId(cx, v.clienteId);
-    return { ...(await repo.buscar(cx, jaGravada)), repetida: true };
+    // O vínculo roda TAMBÉM no reenvio, e não só quando a visita nasce: se o
+    // sinal caiu entre gravar a visita e pendurar as fotos, a segunda tentativa
+    // é a única chance de completar. As duas escritas são idempotentes.
+    if (midiaIds.length) {
+      await repo.vincularMidia(cx, id, midiaIds);
+      // Quem carimba de quem é a foto é este ponto, porque é aqui que o produtor
+      // já foi conferido contra a carteira. É o que a faz aparecer no portal
+      // dele: a lavoura é do produtor, e a foto dela também.
+      await midia.atribuirAoProdutor(cx, midiaIds, v.produtorId);
+    }
+
+    return {
+      ...(await repo.buscar(cx, id)),
+      fotos: await repo.midiaDaVisita(cx, id),
+      repetida: novo === null,
+    };
   });
 }
 
@@ -83,7 +110,7 @@ export function buscar(ctx, id) {
   return comContexto(ctx, async (cx) => {
     const v = await repo.buscar(cx, id);
     if (!v) throw new NaoEncontrado('visita');
-    return v;
+    return { ...v, fotos: await repo.midiaDaVisita(cx, id) };
   });
 }
 

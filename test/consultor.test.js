@@ -12,7 +12,7 @@ import { dono, encerrar } from '../api/src/db.js';
 import { migrar } from '../api/src/migrar.js';
 import { subirApi, criarTenant, criarUsuario, entrar, limparBase } from './ajuda.js';
 
-let req, fechar, tConsultor, tOutraRevenda, produtorId;
+let req, base, fechar, tConsultor, tOutraRevenda, tProdutor, produtorId;
 
 before(async () => {
   await migrar({ silencioso: true });
@@ -24,7 +24,7 @@ before(async () => {
   const outra = await criarTenant('Agro Sul', '10101010000110', 'distribuidor');
   await criarUsuario(outra, 'Gestor Sul', 'gestor@sul.com', 'gestor');
 
-  ({ req, fechar } = await subirApi());
+  ({ req, base, fechar } = await subirApi());
   const tGestor = await entrar(req, 'gestora@norte.com');
   tConsultor = await entrar(req, 'ana@norte.com');
   tOutraRevenda = await entrar(req, 'gestor@sul.com');
@@ -177,7 +177,8 @@ test('o produtor não registra visita — quem registra é quem foi ao campo', a
   const ent = await req('/auth/produtor/entrar', {
     metodo: 'POST', corpo: { telefone: '5566999550011', codigo: cod.corpo.codigo },
   });
-  const r = await registrar(visitaDoApp(randomUUID()), ent.corpo.token);
+  tProdutor = ent.corpo.token;
+  const r = await registrar(visitaDoApp(randomUUID()), tProdutor);
   assert.equal(r.status, 400);
   assert.match(r.corpo.erro, /área da empresa/);
 });
@@ -191,4 +192,126 @@ test('a duração medida no celular chega à H1 pelo canal app', async () => {
   assert.ok(app.mediana_seg > 0);
   assert.equal(h1.corpo.confirmaAbaixoDe, 60);
   assert.equal(h1.corpo.mataAcimaDe, 90);
+});
+
+/* ------------------------------------------------------- a foto do talhão */
+
+const JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
+  + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
+  + 'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
+
+/** Sobe uma foto como o app sobe: corpo cru, com a sessão. */
+const subirFoto = (bytes, token = tConsultor, mime = 'image/jpeg') =>
+  fetch(`${base}/midia`, {
+    method: 'POST',
+    headers: { 'content-type': mime, authorization: `Bearer ${token}` },
+    body: bytes,
+  }).then(async (r) => ({ status: r.status, corpo: await r.json().catch(() => null) }));
+
+test('o app sobe a foto com a sessão, sem passar pelo gateway', async () => {
+  const r = await subirFoto(JPEG);
+  assert.equal(r.status, 201);
+  assert.ok(r.corpo.id);
+});
+
+test('a foto sobe sem dono, e quem carimba é o vínculo com a visita', async () => {
+  const foto = await subirFoto(Buffer.concat([JPEG, Buffer.from('bordadura')]));
+  const { rows: [antes] } = await dono.query(
+    'select produtor_id from midia where id = $1', [foto.corpo.id]);
+  assert.equal(antes.produtor_id, null,
+    'aceitar produtorId na subida deixaria pendurar foto na lavoura alheia');
+
+  const v = await registrar(visitaDoApp(randomUUID(), { midiaIds: [foto.corpo.id] }));
+  assert.equal(v.status, 201);
+  assert.equal(v.corpo.fotos.length, 1);
+
+  const { rows: [depois] } = await dono.query(
+    'select produtor_id from midia where id = $1', [foto.corpo.id]);
+  assert.equal(depois.produtor_id, produtorId, 'a lavoura é do produtor, e a foto dela também');
+});
+
+test('o produtor enxerga a foto da visita à lavoura dele', async () => {
+  const foto = await subirFoto(Buffer.concat([JPEG, Buffer.from('gleba 4')]));
+  await registrar(visitaDoApp(randomUUID(), { midiaIds: [foto.corpo.id] }));
+
+  const r = await fetch(`${base}/midia/${foto.corpo.id}`, {
+    headers: { authorization: `Bearer ${tProdutor}` },
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-type'), 'image/jpeg');
+});
+
+test('outra revenda não alcança a foto — nem sabe que existe', async () => {
+  const foto = await subirFoto(Buffer.concat([JPEG, Buffer.from('so nossa')]));
+  await registrar(visitaDoApp(randomUUID(), { midiaIds: [foto.corpo.id] }));
+  const r = await fetch(`${base}/midia/${foto.corpo.id}`, {
+    headers: { authorization: `Bearer ${tOutraRevenda}` },
+  });
+  assert.equal(r.status, 404);
+});
+
+test('reenviar a visita com as mesmas fotos não duplica o vínculo', async () => {
+  const chave = randomUUID();
+  const a = await subirFoto(Buffer.concat([JPEG, Buffer.from('foto a')]));
+  const b = await subirFoto(Buffer.concat([JPEG, Buffer.from('foto b')]));
+  const ids = [a.corpo.id, b.corpo.id];
+
+  const um = await registrar(visitaDoApp(chave, { midiaIds: ids }));
+  const dois = await registrar(visitaDoApp(chave, { midiaIds: ids }));
+
+  assert.equal(um.corpo.repetida, false);
+  assert.equal(dois.corpo.repetida, true);
+  assert.equal(dois.corpo.fotos.length, 2);
+  const { rows } = await dono.query(
+    'select count(*)::int as n from visita_midia where visita_id = $1', [um.corpo.id]);
+  assert.equal(rows[0].n, 2, 'duas fotos, dois vínculos — não quatro');
+});
+
+test('o sinal caiu entre gravar a visita e pendurar a foto: o reenvio completa', async () => {
+  // Foi exatamente isso que o aplicativo faz quando perde o rádio no meio.
+  const chave = randomUUID();
+  const semFoto = await registrar(visitaDoApp(chave));
+  assert.equal(semFoto.corpo.fotos.length, 0);
+
+  const foto = await subirFoto(Buffer.concat([JPEG, Buffer.from('chegou depois')]));
+  const comFoto = await registrar(visitaDoApp(chave, { midiaIds: [foto.corpo.id] }));
+
+  assert.equal(comFoto.corpo.repetida, true);
+  assert.equal(comFoto.corpo.id, semFoto.corpo.id, 'é a mesma visita');
+  assert.equal(comFoto.corpo.fotos.length, 1, 'e agora ela tem a foto');
+});
+
+test('a mesma foto subida duas vezes reaproveita a linha', async () => {
+  const bytes = Buffer.concat([JPEG, Buffer.from('reenvio do binario')]);
+  const um = await subirFoto(bytes);
+  const dois = await subirFoto(bytes);
+  assert.equal(dois.corpo.id, um.corpo.id);
+  assert.equal(dois.corpo.repetido, true);
+});
+
+test('arquivo que não é imagem nem áudio não entra por esta porta', async () => {
+  const r = await subirFoto(Buffer.from('#!/bin/sh'), tConsultor, 'application/x-sh');
+  assert.equal(r.status, 400);
+});
+
+test('o portal do produtor não sobe foto — quem registra é quem foi ao campo', async () => {
+  const r = await subirFoto(JPEG, tProdutor);
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+});
+
+test('mais fotos do que cabem numa visita é recusado', async () => {
+  const r = await registrar(visitaDoApp(randomUUID(), {
+    midiaIds: Array.from({ length: 7 }, () => randomUUID()),
+  }));
+  assert.equal(r.status, 400);
+  assert.equal(r.corpo.campo, 'midiaIds');
+});
+
+test('a listagem já traz os ids das fotos, sem uma ida por visita', async () => {
+  const lista = await req('/visitas', { token: tConsultor });
+  assert.equal(lista.status, 200);
+  assert.ok(lista.corpo.every((v) => Array.isArray(v.fotos)));
+  assert.ok(lista.corpo.some((v) => v.fotos.length > 0));
 });

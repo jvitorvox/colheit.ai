@@ -20,6 +20,10 @@ const num = (n) => Number(n ?? 0).toLocaleString('pt-BR');
 
 // Estádio fenológico da soja. Por toque, nunca digitado: teclado de celular no
 // meio da lavoura é o atrito que mata a H1 sozinho.
+// Teto de fotos por visita — o mesmo do servidor. Bordadura, meio do talhão,
+// praga de perto: mais que isso é álbum, e cada foto é uma subida a mais.
+const MAXIMO_FOTOS = 6;
+
 const ESTADIOS = ['VE', 'VC', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6',
   'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8'];
 
@@ -53,6 +57,41 @@ async function api(caminho, { metodo = 'GET', corpo } = {}) {
   // O service worker marca o que veio da cópia guardada. A tela diz isso: dado
   // velho identificado como velho é melhor que dado velho passando por novo.
   return { dados, doCache: resp.headers.get('x-do-cache') === '1' };
+}
+
+/* ------------------------------------------------------------------ fotos */
+
+// Lado maior da foto guardada. Uma foto de celular tem 3 a 8 MB; a 1600px e
+// qualidade 0,72 ela fica em torno de 250 KB, e continua dando para ver lagarta
+// na folha. Numa conexão de fazenda, é a diferença entre subir e não subir.
+const LADO_MAXIMO = 1600;
+const QUALIDADE = 0.72;
+
+/**
+ * Encolhe a foto antes de ela entrar na fila.
+ *
+ * `imageOrientation: 'from-image'` não é detalhe: sem isso a foto tirada de pé
+ * chega deitada, porque o celular grava a rotação no EXIF em vez de girar os
+ * pixels — e o canvas desenha os pixels como estão.
+ *
+ * Se o navegador não colaborar, fica o arquivo original: foto grande é melhor
+ * que foto nenhuma, e o servidor recusa acima de 12 MB.
+ */
+async function encolher(arquivo) {
+  try {
+    const bitmap = await createImageBitmap(arquivo, { imageOrientation: 'from-image' });
+    const escala = Math.min(1, LADO_MAXIMO / Math.max(bitmap.width, bitmap.height));
+    const tela = document.createElement('canvas');
+    tela.width = Math.round(bitmap.width * escala);
+    tela.height = Math.round(bitmap.height * escala);
+    tela.getContext('2d').drawImage(bitmap, 0, 0, tela.width, tela.height);
+    bitmap.close?.();
+    const menor = await new Promise((ok) => tela.toBlob(ok, 'image/jpeg', QUALIDADE));
+    // Foto já pequena pode sair maior depois do recompress. Fica a menor.
+    return menor && menor.size < arquivo.size ? menor : arquivo;
+  } catch {
+    return arquivo;
+  }
 }
 
 /* --------------------------------------------------------- a fila de saída */
@@ -103,6 +142,43 @@ async function lerFilaDeSaida() {
 }
 
 /**
+ * Sobe as fotos que ainda não subiram e devolve os identificadores.
+ *
+ * O progresso é gravado foto a foto, de volta na fila local. Sem isso, cair o
+ * sinal na terceira foto faria a próxima tentativa remandar as duas primeiras —
+ * meio mega a mais numa conexão que já estava ruim, toda vez.
+ *
+ * O binário sobe uma vez só: o reenvio da visita carrega identificadores, não
+ * arquivos.
+ */
+async function subirFotos(item) {
+  const fotos = item.fotos ?? [];
+  if (!fotos.length) return [];
+
+  const ids = [...(item.fotosEnviadas ?? new Array(fotos.length).fill(null))];
+  for (let i = 0; i < fotos.length; i++) {
+    if (ids[i]) continue;
+    const resp = await fetch('/midia', {
+      method: 'POST',
+      headers: {
+        'content-type': fotos[i].type || 'image/jpeg',
+        ...(estado.token ? { authorization: `Bearer ${estado.token}` } : {}),
+      },
+      body: fotos[i],
+    });
+    const dados = await resp.json().catch(() => null);
+    if (!resp.ok) {
+      const erro = new Error(dados?.erro ?? `erro ${resp.status}`);
+      erro.status = resp.status;
+      throw erro;
+    }
+    ids[i] = dados.id;
+    await enfileirar({ ...item, fotosEnviadas: ids });
+  }
+  return ids;
+}
+
+/**
  * Tenta enviar o que está na fila, do mais antigo para o mais novo.
  *
  * Em ordem, e parando no primeiro problema de rede: adiantar os seguintes só
@@ -120,7 +196,8 @@ async function escoar() {
 
     for (const item of fila) {
       try {
-        await api('/visitas', { metodo: 'POST', corpo: item.corpo });
+        const midiaIds = await subirFotos(item);
+        await api('/visitas', { metodo: 'POST', corpo: { ...item.corpo, midiaIds } });
         await desenfileirar(item.clienteId);
       } catch (erro) {
         if (erro.status === 401) {
@@ -304,6 +381,57 @@ function telaVisita(app, f) {
   c.append(chips);
   app.append(c);
 
+  // Fotos. Ficam ANTES do estande de propósito: é o que o consultor faz com o
+  // talhão na frente, e o que ele digita é depois, andando de volta.
+  const fotos = [];
+  const cF = el('div', 'cartao');
+  cF.append(el('p', 'rotulo', 'Fotos do talhão'));
+  const galeria = el('div', 'galeria');
+  const escolher = el('input');
+  // `capture` abre a câmera direto no celular; no computador vira seletor de
+  // arquivo, e é o mesmo caminho. `multiple` porque bordadura e meio do talhão
+  // são duas fotos, não duas visitas.
+  Object.assign(escolher, { type: 'file', accept: 'image/*', capture: 'environment', multiple: true });
+  escolher.hidden = true;
+  const botaoFoto = el('button', 'botao vazado');
+  botaoFoto.type = 'button';
+  botaoFoto.textContent = 'Tirar foto';
+  botaoFoto.onclick = () => escolher.click();
+
+  const redesenharGaleria = () => {
+    galeria.replaceChildren();
+    fotos.forEach((f, i) => {
+      const cx = el('div', 'miniatura');
+      const img = el('img');
+      img.src = URL.createObjectURL(f);
+      img.alt = `foto ${i + 1}`;
+      // A URL é solta assim que a imagem desenha: a foto de 250 KB fica presa
+      // na memória até alguém soltar, e são várias por dia de campo.
+      img.onload = () => URL.revokeObjectURL(img.src);
+      const tirar = el('button', 'tirar', '×');
+      tirar.type = 'button';
+      tirar.title = 'remover';
+      tirar.onclick = () => { fotos.splice(i, 1); redesenharGaleria(); };
+      cx.append(img, tirar);
+      galeria.append(cx);
+    });
+    botaoFoto.textContent = fotos.length ? `Mais uma foto (${fotos.length})` : 'Tirar foto';
+    botaoFoto.disabled = fotos.length >= MAXIMO_FOTOS;
+  };
+
+  escolher.onchange = async () => {
+    botaoFoto.disabled = true;
+    botaoFoto.textContent = 'preparando…';
+    for (const arquivo of [...escolher.files].slice(0, MAXIMO_FOTOS - fotos.length)) {
+      fotos.push(await encolher(arquivo));
+    }
+    escolher.value = '';   // escolher a mesma foto de novo tem de disparar
+    redesenharGaleria();
+  };
+
+  cF.append(galeria, escolher, botaoFoto);
+  app.append(cF);
+
   const c2 = el('div', 'cartao');
   c2.append(el('label', 'rotulo', 'Estande (plantas/m)'));
   const estande = el('input');
@@ -335,6 +463,10 @@ function telaVisita(app, f) {
       clienteId: (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`),
       em: new Date().toISOString(),
       produtor: f.produtor,
+      // Os binários viajam na fila local; o que sobe para o servidor é foto por
+      // foto, e o reenvio da visita leva só os identificadores.
+      fotos: [...fotos],
+      fotosEnviadas: new Array(fotos.length).fill(null),
       corpo: {
         produtorId: f.produtor_id,
         canal: 'app',
@@ -360,7 +492,7 @@ function telaVisita(app, f) {
     // Volta para a fila na hora. O envio corre por fora — o consultor já pode
     // andar para o próximo talhão.
     estado.tela = null;
-    estado.ultimaGravada = { produtor: f.produtor, duracaoSeg };
+    estado.ultimaGravada = { produtor: f.produtor, duracaoSeg, fotos: fotos.length };
     await lerFilaDeSaida();
     desenhar();
     escoar();
@@ -400,9 +532,26 @@ function telaSaida(app) {
       c.append(topo);
       c.append(el('p', 'sub', [
         i.corpo.estagio, i.corpo.estande ? `estande ${i.corpo.estande}` : null,
+        i.fotos?.length ? `${i.fotos.length} foto(s)` : null,
         `${i.corpo.duracaoSeg}s para registrar`,
       ].filter(Boolean).join(' · ')));
       if (i.corpo.observacao) c.append(el('p', 'obs', i.corpo.observacao));
+
+      // As miniaturas saem da própria fila local: sem rede, o consultor
+      // continua vendo o que fotografou e o que ainda não subiu.
+      if (i.fotos?.length) {
+        const g = el('div', 'galeria');
+        i.fotos.forEach((b, n) => {
+          const cx = el('div', `miniatura${i.fotosEnviadas?.[n] ? ' subiu' : ''}`);
+          const img = el('img');
+          img.src = URL.createObjectURL(b);
+          img.alt = `foto ${n + 1}`;
+          img.onload = () => URL.revokeObjectURL(img.src);
+          cx.append(img);
+          g.append(cx);
+        });
+        c.append(g);
+      }
 
       if (i.recusado) {
         c.append(el('p', 'erro', i.recusado));
@@ -436,8 +585,10 @@ function desenhar() {
   if (estado.ultimaGravada) {
     const g = estado.ultimaGravada;
     const f = el('div', 'faixa');
-    f.append(el('strong', null, `${g.produtor}: registrado em ${g.duracaoSeg}s. `),
-      document.createTextNode(navigator.onLine ? 'Enviando.' : 'Sai quando o sinal voltar.'));
+    f.append(el('strong', null,
+      `${g.produtor}: registrado em ${g.duracaoSeg}s`
+      + (g.fotos ? ` com ${g.fotos} foto(s). ` : '. ')),
+    document.createTextNode(navigator.onLine ? 'Enviando.' : 'Sai quando o sinal voltar.'));
     app.append(f);
   }
 

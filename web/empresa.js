@@ -729,7 +729,9 @@ desenhar();
 /* ---------------------------------------------------------------- visitas */
 
 async function telaVisitas(main) {
-  const [fila, h1] = await Promise.all([api('/visitas/fila'), api('/visitas/h1')]);
+  const [fila, h1, ultimas] = await Promise.all([
+    api('/visitas/fila'), api('/visitas/h1'), api('/visitas'),
+  ]);
 
   main.append(cabecalho('Visitas',
     `fila por tempo sem visita, pesada pela área · corte em ${fila[0]?.corteDias ?? 15} dias`));
@@ -742,6 +744,8 @@ async function telaVisitas(main) {
     main.append(el('p', 'vazio', 'Nenhum produtor na carteira ainda.'));
     return;
   }
+
+  main.append(cartaoUltimasVisitas(ultimas));
 
   main.append(tabela(
     ['Produtor', 'Município', 'Área', 'Última visita', 'Sem visita', ''],
@@ -760,6 +764,49 @@ async function telaVisitas(main) {
       ];
     }),
   ));
+}
+
+/**
+ * O que o campo trouxe, com as fotos.
+ *
+ * Existe porque foto que ninguém vê não valia ter sido tirada: o consultor
+ * fotografa a bordadura, e é aqui que o agrônomo da revenda julga sem ter ido.
+ */
+function cartaoUltimasVisitas(visitas) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'Últimas visitas'));
+
+  if (visitas.length === 0) {
+    c.append(el('p', 'sub', 'Nenhuma visita registrada ainda.'));
+    return c;
+  }
+
+  visitas.slice(0, 8).forEach((v) => {
+    const l = el('div', 'linha');
+    l.append(el('span', null, v.produtor),
+      el('span', 'id', [v.consultor, v.estagio, v.talhao].filter(Boolean).join(' · ')),
+      el('span', 'num', `${dia(v.em)} · ${v.canal}`));
+    c.append(l);
+    if (v.observacao) c.append(el('p', 'obs', v.observacao));
+
+    if (v.fotos?.length) {
+      const g = el('div', 'galeria');
+      v.fotos.forEach((id) => {
+        const cx = el('div', 'miniatura');
+        // Buscada com a sessão e mostrada como blob: a rota é privada, e tag de
+        // imagem não carrega cabeçalho de autorização.
+        midiaUrl(id).then(({ url }) => {
+          const img = el('img');
+          img.src = url;
+          img.alt = `foto da visita a ${v.produtor}`;
+          cx.replaceChildren(img);
+        }).catch(() => cx.replaceChildren(el('span', 'sub', '—')));
+        g.append(cx);
+      });
+      c.append(g);
+    }
+  });
+  return c;
 }
 
 function painelH1(h1) {
