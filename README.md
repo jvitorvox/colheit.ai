@@ -364,6 +364,103 @@ Resposta de `/auth/` nunca é guardada.
 tela pediria recarga forçada — e alguém perderia meia hora achando que o código não
 subiu.
 
+## O app do consultor — e a H1 no bolso
+
+`/consultor`, instalável pelo `manifest-consultor.json`. Terceiro front-end da
+mesma origem, e o único que escreve sem conexão.
+
+Duas coisas o definem, e as duas vêm da H1: registrar uma visita tem de caber em
+menos de 60 segundos, e tem de funcionar sem sinal. Se qualquer uma das duas
+falhar não há dado, e sem dado não há produto.
+
+### A visita é gravada antes de ser enviada
+
+```
+toque em Registrar
+  → clienteId gerado no celular
+  → gravada em IndexedDB          ← aqui o consultor já pode andar
+  → POST /visitas quando houver sinal
+```
+
+Nunca se espera a rede para dizer que está feito. No meio do talhão,
+"enviando..." girando é o mesmo que perder o registro. A tela volta para a fila
+na hora, com o número de segundos que levou.
+
+IndexedDB e não `localStorage`: aqui mora trabalho de campo que ainda não chegou
+ao servidor, e `localStorage` é síncrono, pequeno e o primeiro a cair em
+qualquer faxina do navegador.
+
+### O reenvio é o normal, não a exceção
+
+O rádio cai no meio do POST, a resposta não chega, e o app — que não tem como
+saber se o servidor gravou — tenta de novo. **Sem uma chave que o cliente gera,
+cada tentativa viraria uma visita:** o consultor passou uma vez e a mediana da H1
+passaria a contar três registros de dez segundos. O número que decide o produto,
+envenenado justamente pela peça que existe para alimentá-lo.
+
+Daí `visita.cliente_id`, gerado no celular **antes** da primeira tentativa e
+repetido em todas. O servidor grava com
+`on conflict (tenant_id, cliente_id) do nothing` e devolve a visita que já
+existe, com `repetida: true`.
+
+`on conflict` e não tentar-e-tratar-o-erro: dentro de uma transação, uma violação
+de unicidade aborta tudo, e a consulta seguinte falharia sobre o que já foi
+desfeito. Assim, o reenvio e a corrida entre dois reenvios simultâneos se
+resolvem de uma vez — há teste com quatro ao mesmo tempo.
+
+| | Por quê |
+|---|---|
+| a chave é por tenant | chave que o cliente gera não pode servir de sonda para descobrir o que outra empresa gravou |
+| o reenvio **não** reescreve | vale o que foi medido na primeira gravação |
+| sem `clienteId`, nada muda | é o caminho do console e do relato de WhatsApp |
+| duas visitas no mesmo produtor seguem sendo duas | o freio é o reenvio, não o produtor: passar duas vezes é trabalho de verdade |
+
+### O que o formulário não pede
+
+Estádio é **toque**, nunca digitado — 16 chips de VE a R8. Teclado de celular no
+meio da lavoura é o atrito que mata a H1 sozinho. Tocar de novo desmarca: errar o
+chip e não poder voltar atrás faria o consultor gravar um estádio errado só para
+sair da tela.
+
+O cronômetro para no toque em Registrar, **não** quando a rede responde: a
+duração é do registro, que é o que a hipótese afirma. Medir o envio junto
+misturaria sinal de celular com atrito de formulário.
+
+A hora da visita sai do relógio do celular. Visitada às seis da manhã e
+sincronizada às seis da tarde é uma visita da manhã.
+
+### Nada fica invisível
+
+| Situação | O que o consultor vê |
+|---|---|
+| sem sinal | quantas visitas estão guardadas, e que saem sozinhas |
+| sessão venceu no campo | as visitas ficam na fila; entrar de novo as libera — 401 **não** descarta trabalho |
+| servidor recusou (400) | a visita fica marcada na Fila de saída, com o motivo e um botão de descartar; voltar para a fila seria laço infinito |
+| navegador sem IndexedDB | aviso de que sem sinal o registro se perde |
+| service worker não registrou | aviso de que registrar sem sinal funciona, mas só com o app já aberto |
+
+Esse último existe porque falha silenciosa ali seria a pior de todas: o app
+prometeria trabalhar sem sinal e só quebraria no talhão, onde não há como
+descobrir por quê.
+
+A fila do dia vem do cache quando não há rede, e a tela **diz** que é lista
+guardada. Fila de ontem passando por fila de hoje é pior que fila nenhuma: o
+consultor dirige até um produtor que o colega já visitou.
+
+### O que ficou de fora, e por quê
+
+**Background Sync.** O reenvio mora na página, não no service worker. Levá-lo
+para lá significaria guardar o token de sessão onde o botão Sair não alcança. O
+consultor volta ao sinal com o app aberto ou reabre o app, e o escoamento roda
+nos dois casos — além de no evento `online`.
+
+**Foto e áudio.** Já existem, pelo WhatsApp, com armazenamento e política. Pôr
+uma segunda porta aqui só afastaria o formulário dos 60 segundos.
+
+Cada app tem seu service worker: `sw.js` para o portal (leitura e push),
+`consultor-sw.js` para o campo (casca e fila do dia). Dois mexendo no mesmo
+cache seria um limpando o que o outro acabou de guardar.
+
 ## A área da empresa
 
 O console de gestor e consultor, em `/empresa`. Mesma origem, mesmos tokens
@@ -397,7 +494,7 @@ no WhatsApp com o formulário do aplicativo.
 GET  /visitas            histórico (o produtor vê as da lavoura dele)
 GET  /visitas/fila       a fila do dia — só empresa
 GET  /visitas/h1         mediana e p90 por canal, com o veredito — só empresa
-POST /visitas            registra
+POST /visitas            registra; aceita `clienteId` (ver o app do consultor)
 ```
 
 O console cronometra a si mesmo: o relógio começa quando a janela abre e para no

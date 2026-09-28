@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>colheit.ai · campo</title>
+<meta name="description" content="A fila do dia e o registro de visita, com ou sem sinal.">
+<link rel="manifest" href="/manifest-consultor.json">
+<meta name="theme-color" content="#14692A">
+<link rel="apple-touch-icon" href="/icone-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="campo">
+<link rel="stylesheet" href="/base.css">
+<style>
+/* Só o que é do aplicativo de campo. Tokens e primitivas vivem em base.css.
+   Aqui tudo é dedão: alvo grande, uma coluna, nada que exija precisão. */
+body{padding:0 0 calc(76px + env(safe-area-inset-bottom))}
+#app{max-width:560px;margin:0 auto;padding:14px 14px 0}
+
+.topo{display:flex;align-items:center;gap:12px;margin:6px 0 12px}
+.topo h2{font-size:1.25rem}
+.voltar{width:42px;height:42px;flex:none;border:1px solid var(--linha);background:var(--papel);
+  border-radius:12px;font-size:19px;color:var(--tinta-2)}
+
+/* Um produtor da fila. A linha inteira é o botão — no campo, com luva, não se
+   acerta um link de 14px. */
+.alvo{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;
+  width:100%;text-align:left;background:var(--papel);border:1px solid var(--linha);
+  border-radius:14px;padding:14px;margin-bottom:9px;box-shadow:var(--sombra)}
+.alvo:active{transform:scale(.995)}
+.alvo .nome{font-size:1.0625rem;font-weight:600;color:var(--tinta)}
+.alvo .onde{font-size:.8125rem;color:var(--tinta-3)}
+.alvo.atrasado{border-left:4px solid var(--sol)}
+.alvo.nunca{border-left:4px solid var(--alerta)}
+
+/* Estádio fenológico por toque. Digitar "V6" num celular sujo de terra é o
+   tipo de atrito que faz a H1 morrer — o teclado nem abre. */
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:8px}
+.chips button{padding:14px 4px;border:1px solid var(--linha);background:var(--papel-2);
+  border-radius:12px;font-size:.9375rem;font-weight:600;color:var(--tinta-2)}
+.chips button.ativo{border-color:var(--marca);background:var(--marca-suave);color:var(--marca)}
+
+/* O botão de gravar mostra o cronômetro: a H1 é medida em toda visita, e quem
+   registra vê o próprio número. */
+.gravar{position:fixed;left:0;right:0;bottom:0;padding:10px 14px
+  calc(10px + env(safe-area-inset-bottom));background:var(--papel);
+  border-top:1px solid var(--linha);z-index:6}
+.gravar .botao{width:100%;padding:16px;font-size:1.0625rem;display:flex;
+  justify-content:center;gap:10px}
+.gravar .crono{font-variant-numeric:tabular-nums;opacity:.75;font-weight:400}
+
+.abas{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--papel);
+  border-top:1px solid var(--linha);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+.abas button{flex:1;border:none;background:none;padding:16px 6px;font-size:.875rem;
+  color:var(--tinta-3)}
+.abas button.ativa{color:var(--marca);font-weight:600}
+.abas .conta{display:inline-block;min-width:19px;margin-left:5px;padding:1px 5px;
+  border-radius:99px;background:var(--sol);color:#000;font-size:.6875rem;font-weight:700}
+
+.entrada{max-width:380px;margin:11vh auto 0;text-align:center}
+.marca{font-size:1.75rem;color:var(--marca)}
+.entrada .sub{margin:8px 0 22px;font-size:.9375rem;color:var(--tinta-2)}
+.entrada form{text-align:left}
+.entrada .botao{width:100%;margin-top:12px;padding:14px;font-size:1rem}
+
+/* Estado da conexão. Some quando está tudo em dia: aviso permanente é aviso
+   que ninguém lê. */
+.sinal{display:flex;align-items:center;gap:8px;font-size:.8125rem;padding:9px 12px;
+  border-radius:12px;margin-bottom:11px}
+.sinal.offline{background:var(--sol-suave);border:1px solid var(--sol);color:var(--sol-tinta)}
+.sinal.erro{background:var(--alerta-suave);border:1px solid var(--alerta);color:var(--alerta)}
+
+textarea{min-height:88px}
+input,textarea,select{font-size:1rem}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="/consultor.js"></script>
+</body>
+</html>

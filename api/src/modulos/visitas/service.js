@@ -23,14 +23,25 @@ export function registrar(ctx, corpo = {}) {
     estande: areaValida(corpo.estande, 'estande'),
     observacao: corpo.observacao ? textoObrigatorio(corpo.observacao, 'observacao', 2000) : null,
     relatoId: corpo.relatoId ? uuidValido(corpo.relatoId, 'relatoId') : null,
+    // A chave do reenvio. Vem do aplicativo, que a gera ANTES de tentar
+    // enviar — é isso que a torna a mesma nas duas tentativas.
+    clienteId: corpo.clienteId ? uuidValido(corpo.clienteId, 'clienteId') : null,
   };
 
   return comContexto(ctx, async (cx) => {
     if (!(await repo.produtorNaCarteira(cx, v.produtorId))) {
       throw new ErroDeUso('produtor não está na carteira desta empresa', 'produtorId');
     }
+
+    // Reenvio é o normal de quem trabalha sem sinal, não a exceção: o rádio cai
+    // no meio do POST, a resposta não chega, e o aplicativo tenta de novo sem
+    // ter como saber se gravou. Devolver a visita que já existe é o que impede
+    // uma visita de virar três registros de dez segundos na mediana da H1.
     const id = await repo.registrar(cx, v);
-    return repo.buscar(cx, id);
+    if (id) return { ...(await repo.buscar(cx, id)), repetida: false };
+
+    const jaGravada = await repo.porClienteId(cx, v.clienteId);
+    return { ...(await repo.buscar(cx, jaGravada)), repetida: true };
   });
 }
 

@@ -1,15 +1,35 @@
 // SQL do módulo visitas.
 
+/**
+ * Grava a visita. Devolve null quando o reenvio já havia gravado esta mesma.
+ *
+ * `on conflict` em vez de tentar-e-tratar-o-erro: dentro de uma transação, uma
+ * violação de unicidade aborta tudo, e a consulta seguinte falharia em cima do
+ * que já está desfeito. O `do nothing` mantém a transação viva e resolve de
+ * uma vez o reenvio e a corrida entre dois reenvios simultâneos.
+ *
+ * A inferência aponta o índice parcial de propósito: outras violações — o
+ * `relato_id unique`, por exemplo — continuam estourando como devem.
+ */
 export async function registrar(cx, v) {
   const { rows } = await cx.query(`
     insert into visita (tenant_id, produtor_id, propriedade_id, talhao_id, usuario_id,
-                        em, canal, duracao_seg, estagio, estande, observacao, relato_id)
+                        em, canal, duracao_seg, estagio, estande, observacao, relato_id,
+                        cliente_id)
     values (app.tenant_atual(), $1, $2, $3, app.usuario_atual(),
-            coalesce($4::timestamptz, now()), $5, $6, $7, $8, $9, $10)
+            coalesce($4::timestamptz, now()), $5, $6, $7, $8, $9, $10, $11)
+    on conflict (tenant_id, cliente_id) where cliente_id is not null do nothing
     returning id`,
   [v.produtorId, v.propriedadeId, v.talhaoId, v.em, v.canal, v.duracaoSeg,
-    v.estagio, v.estande, v.observacao, v.relatoId]);
-  return rows[0].id;
+    v.estagio, v.estande, v.observacao, v.relatoId, v.clienteId]);
+  return rows[0]?.id ?? null;
+}
+
+/** A visita que este reenvio já gravou, se gravou. */
+export async function porClienteId(cx, clienteId) {
+  const { rows } = await cx.query(
+    'select id from visita where cliente_id = $1', [clienteId]);
+  return rows[0]?.id ?? null;
 }
 
 export async function buscar(cx, id) {

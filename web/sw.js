@@ -14,7 +14,11 @@ const ARQUIVOS = ['/', '/index.html', '/app.js', '/base.css', '/manifest.json', 
 // O console da empresa fica de fora: é aplicação de mesa, com conexão, e não
 // tem por que abrir offline. Guardar a casca dele só serviria para servir
 // versão velha a quem trabalha o dia inteiro nela.
-const FORA = (p) => p.startsWith('/empresa');
+//
+// O aplicativo de campo também fica de fora, por outro motivo: ele tem o
+// `consultor-sw.js` dele, com fila de escrita. Dois service workers mexendo no
+// mesmo cache seria um limpando o que o outro acabou de guardar.
+const FORA = (p) => p.startsWith('/empresa') || p.startsWith('/consultor');
 
 self.addEventListener('install', (ev) => {
   ev.waitUntil(caches.open(CASCA).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
