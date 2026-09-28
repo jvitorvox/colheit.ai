@@ -492,8 +492,9 @@ const dataHora = (d) => (d
  * leitura comercial, serve ao share por marca, e não diz nada a quem plantou.
  */
 async function telaCaderno(raiz) {
-  const [plantios, desempenho, resultado] = await Promise.all([
+  const [plantios, desempenho, resultado, regiao] = await Promise.all([
     api('/caderno/plantios'), api('/caderno/desempenho'), api('/caderno/resultado'),
+    api('/caderno/benchmark').catch(() => null),
   ]);
 
   const area = el('section');
@@ -502,7 +503,7 @@ async function telaCaderno(raiz) {
   // O resultado vem antes do que foi plantado: é o fim do laço, e é a pergunta
   // que ele faz primeiro — como foi o ano. Aba própria seria a sexta em 375px,
   // e o assunto é o mesmo: o que entrou no talhão e o que saiu dele.
-  if (resultado?.safra) area.append(cartaoResultado(resultado));
+  if (resultado?.safra) area.append(cartaoResultado(resultado, regiao));
 
   if (plantios.length === 0) {
     area.append(vazio('Nada registrado ainda. O consultor anota o plantio, '
@@ -545,7 +546,7 @@ async function telaCaderno(raiz) {
  * volta ao funil da safra seguinte; para ele é o ano dele, e é o único lugar do
  * sistema que responde "como foi".
  */
-function cartaoResultado(r) {
+function cartaoResultado(r, regiao) {
   const c = el('article', 'cartao destaque');
   const topo = el('div', 'linha');
   topo.append(el('strong', null, `Safra ${r.safra}`),
@@ -573,6 +574,22 @@ function cartaoResultado(r) {
       + `em relação à safra ${r.anterior.safra} `
       + `(${r.anterior.mediaPonderadaScHa.toLocaleString('pt-BR')} sc/ha)`;
     c.append(linha);
+  }
+
+  // A comparação com a vizinhança. Aparece só quando há gente bastante para o
+  // número ser anônimo — e quando não há, some em vez de dizer "sem dados": o
+  // produtor não precisa ficar esperando uma régua que depende de quantos
+  // vizinhos dele entraram no sistema.
+  if (regiao && !regiao.semGenteBastante && regiao.mediaPonderadaScHa) {
+    const dif = Math.round((r.mediaPonderadaScHa / regiao.mediaPonderadaScHa - 1) * 1000) / 10;
+    const l = el('p', dif >= 0 ? 'variacao sobe' : 'variacao desce');
+    l.textContent = `${dif > 0 ? '+' : ''}${dif.toLocaleString('pt-BR')}% em relação a `
+      + `${regiao.produtores} outros produtores de `
+      + `${regiao.nivel === 'município' ? regiao.municipio : regiao.uf} que estão aqui`;
+    c.append(l);
+    // A frase diz de quantos é a média, e que não é a do município: é a de quem
+    // está aqui dentro. A diferença é grande e a tela não pode escondê-la.
+    c.append(el('p', 'obs', `${regiao.base.charAt(0).toUpperCase()}${regiao.base.slice(1)}.`));
   }
 
   const n = el('div', 'linha');

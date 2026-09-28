@@ -311,3 +311,35 @@ export async function safraPorMunicipio(cx, safra) {
      order by media_ponderada_sc_ha desc nulls last`, [safra]);
   return rows;
 }
+
+/**
+ * Onde o produtor mais planta nesta safra — o município do benchmark dele.
+ *
+ * Ele pode ter terra em mais de um; comparar com "a região" sem dizer qual
+ * seria escolher por ele. Vale a de maior área, e a resposta diz o nome.
+ */
+export async function municipioPrincipal(cx, safra, produtorId) {
+  const { rows } = await cx.query(`
+    select pr.municipio, pr.uf, sum(coalesce(pl.area_ha, t.area_ha)) as ha
+      from plantio pl
+      join talhao t on t.id = pl.talhao_id
+      join propriedade pr on pr.id = t.propriedade_id
+      join produtor_propriedade pp
+        on pp.propriedade_id = pr.id and pp.fim is null and pp.produtor_id = $2
+     where pl.safra = $1 and pr.municipio is not null
+     group by pr.municipio, pr.uf
+     order by ha desc
+     limit 1`, [safra, produtorId]);
+  return rows[0] ?? null;
+}
+
+/**
+ * Chama a função de benchmark. Ela é `security definer` e tem a regra de
+ * anonimato dentro: aqui não há o que conferir, e é de propósito — se o
+ * chamador pudesse afrouxar, a regra não seria regra.
+ */
+export async function benchmarkRegional(cx, safra, municipio, uf, excluir) {
+  const { rows } = await cx.query(
+    'select * from app.benchmark_regional($1,$2,$3,$4)', [safra, municipio, uf, excluir]);
+  return rows[0] ?? null;
+}

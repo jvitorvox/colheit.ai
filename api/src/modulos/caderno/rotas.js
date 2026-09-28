@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { rota } from '../../http/erros.js';
+import { rota, ErroDeUso } from '../../http/erros.js';
 import { identificar, soEmpresa } from '../../http/identificar.js';
 import * as servico from './service.js';
 
@@ -54,4 +54,17 @@ rotasCaderno.get('/resultado-por-franqueado', soEmpresa, rota(async (req, res) =
 // está na propriedade que o próprio tenant cadastrou.
 rotasCaderno.get('/resultado-por-municipio', soEmpresa, rota(async (req, res) => {
   res.json(await servico.safraPorMunicipio(req.ctx, req.query.safra));
+}));
+
+/**
+ * O benchmark regional. Serve as duas sessões: o produtor pergunta pela própria
+ * lavoura, e a empresa pode perguntar pela de um produtor da carteira.
+ *
+ * Quem garante o anonimato é a função no banco, não esta rota — e é por isso
+ * que ela pode ser aberta assim.
+ */
+rotasCaderno.get('/benchmark', rota(async (req, res) => {
+  const produtorId = req.query.produtorId ?? req.ctx.produtor;
+  if (!produtorId) throw new ErroDeUso('produtorId é obrigatório', 'produtorId');
+  res.json(await servico.benchmarkDoProdutor(req.ctx, req.query.safra, produtorId));
 }));

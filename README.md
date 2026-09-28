@@ -548,6 +548,48 @@ decide se é a terra de um produtor ou a carteira da revenda. Não virou aba
 própria porque seria a sexta em 375px, e o assunto é o mesmo do caderno — o que
 entrou no talhão e o que saiu dele.
 
+### ⚠️ O benchmark regional — o número mais fácil de vazar
+
+"Como eu fui em relação à minha região?" é a pergunta que o produtor mais quer
+responder. **Num município com dois produtores, a média da região É o número do
+vizinho**: basta subtrair o próprio.
+
+`app.benchmark_regional` é a **única função do sistema que lê através de
+produtores diferentes**, e por isso está escrita para ser lida inteira:
+
+| | |
+|---|---|
+| `security definer` | tem de ser — a política do portal limita o produtor à terra dele, e um benchmark que só enxerga a terra dele não é benchmark. Não há como fazer isto por política. |
+| devolve só agregado | nunca uma linha, nunca um nome, nunca um id. Há teste conferindo as quatro colunas. |
+| a regra mora **dentro** | chamador nenhum pode contorná-la, nem por engano nem de propósito |
+| quem pergunta é **excluído** | comparar-se com um grupo que te contém é comparar-se consigo mesmo, e ainda facilita a subtração |
+
+**O piso são cinco outros produtores.** Com três, quem conhece dois vizinhos
+deduz o terceiro; com cinco, o resíduo de uma subtração continua sendo um bolo
+de quatro. Está em `app.benchmark_minimo()`, e não num arquivo de configuração,
+porque **afrouxá-lo tem de ser uma migração que alguém revisa**.
+
+Município magro sobe para o estado, e a resposta **diz qual nível usou** — sem
+isso ele lê "região" achando que é a cidade dele. Estado magro não inventa:
+devolve nada.
+
+```
+Safra 26/27: 64,2 sc/ha na média, 2.800 ha colhidos (3 de 3 talhões).
++10,3% em relação à safra 25/26.
++5,1% em relação a 5 outros produtores de Sorriso que estão aqui (61,1 sc/ha).
+Melhor: Gleba 2, 71,2 sc/ha.
+Média ponderada pela área colhida.
+```
+
+**"que estão aqui"** não é enfeite: não é a média do município, é a média de
+quem está no sistema. A frase viaja com o número no portal e no WhatsApp.
+
+Quando não há gente bastante, a linha **some** — não diz "sem dados". O produtor
+não precisa saber que existe uma régua que ainda não alcançou; dizer isso o
+faria voltar semana que vem esperando um número que depende de quantos vizinhos
+dele entraram no sistema.
+
+
 ### Ele não sabe quem consulta, mas sabe quem entrou na porteira
 
 São coisas diferentes, e a diferença é fácil de desfazer por engano depois.
@@ -1122,6 +1164,7 @@ GET  /caderno/resultado             o fechamento da safra, ponderado pela área
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/resultado-por-franqueado  a safra de cada franqueado da rede
 GET  /caderno/resultado-por-municipio   a safra por região, sem nomear franqueado
+GET  /caderno/benchmark             a região, anônima e com piso de cinco
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige
 POST /caderno/plantios/:id/colheita fecha o laço

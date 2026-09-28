@@ -164,6 +164,12 @@ async function responderSobreSafra(ctx, texto) {
       return `Qual deles? ${ambiguos.map((t) => t.nome).join(', ')}.`;
     }
     if (achado) return respostaDoTalhao(r, achado.nome);
+
+    // A comparação com a região entra só na pergunta geral. Numa resposta de
+    // talhão ela confundiria duas comparações na mesma mensagem — a do talhão
+    // com a lavoura dele, e a da lavoura com a vizinhança.
+    const b = await caderno.benchmarkDoProdutor(ctx, r.safra, ctx.produtor);
+    return maiuscula(resumoDaSafra(r, linhaDoBenchmark(b, r)));
   }
 
   return maiuscula(resumoDaSafra(r));
@@ -207,7 +213,7 @@ const maiuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1);
  * ele nomeou — porque a forma da resposta não muda, e duas versões divergiriam
  * na primeira vez que alguém mexesse numa delas.
  */
-function resumoDaSafra(r) {
+function resumoDaSafra(r, comparacao) {
   if (!r?.safra) return 'não tenho plantio registrado.';
   if (r.mediaPonderadaScHa === null) {
     return `safra ${r.safra}: ainda não há colheita registrada `
@@ -223,6 +229,11 @@ function resumoDaSafra(r) {
     linhas.push(`${r.anterior.variacaoPct > 0 ? '+' : ''}${n(r.anterior.variacaoPct)}% `
       + `em relação à safra ${r.anterior.safra}.`);
   }
+  // A comparação com a região entra ao lado da comparação com o ano passado:
+  // são as duas réguas, e separá-las com o melhor talhão no meio faria a
+  // segunda parecer um adendo.
+  if (comparacao) linhas.push(comparacao);
+
   const melhor = r.porTalhao.find((t) => t.produtividadeScHa !== null);
   if (melhor) linhas.push(`Melhor: ${melhor.talhao}, ${n(melhor.produtividadeScHa)} sc/ha.`);
   linhas.push('Média ponderada pela área colhida.');
@@ -334,4 +345,25 @@ export async function guardarMidia({ numeroDoCanal, telefone, mime, bytes }) {
 
   const quem = await repo.identificar(dono, soDigitos(telefone), tenantId);
   return midia.guardar({ tenantId, produtorId: quem.produtorId, mime, bytes });
+}
+
+/**
+ * A linha da região, quando ela existe.
+ *
+ * Silêncio quando não há vizinhos bastante, e não "sem dados": o produtor não
+ * precisa saber que a régua existe e não alcançou — e dizer isso convidaria a
+ * perguntar de novo semana que vem, esperando um número que só aparece quando
+ * mais gente da cidade dele estiver no sistema.
+ *
+ * Quando existe, a frase diz de quantos é a média. É o que impede o número de
+ * ser lido como "a média do município", que ele não é: é a média de quem está
+ * aqui dentro.
+ */
+function linhaDoBenchmark(b, r) {
+  if (!b || b.semGenteBastante || r.mediaPonderadaScHa === null) return null;
+  const dif = Math.round((r.mediaPonderadaScHa / b.mediaPonderadaScHa - 1) * 1000) / 10;
+  const n = (v) => Number(v).toLocaleString('pt-BR');
+  const onde = b.nivel === 'município' ? b.municipio : b.uf;
+  return `${dif > 0 ? '+' : ''}${n(dif)}% em relação a ${b.produtores} outros `
+    + `produtores de ${onde} que estão aqui (${n(b.mediaPonderadaScHa)} sc/ha).`;
 }

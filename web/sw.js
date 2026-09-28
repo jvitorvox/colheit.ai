@@ -8,7 +8,7 @@
 // Virar a versão APAGA a casca e os dados guardados, e é obrigatório sempre que
 // `/app.js` ou `/base.css` mudam: a casca é servida cache-primeiro, então sem
 // isto o produtor continuaria abrindo a versão velha do portal para sempre.
-const VERSAO = 'v5';
+const VERSAO = 'v6';
 const CASCA = `casca-${VERSAO}`;
 const DADOS = `dados-${VERSAO}`;
 

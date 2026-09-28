@@ -303,3 +303,49 @@ export function safraPorMunicipio(ctx, safra) {
     }));
   });
 }
+
+/**
+ * Como a lavoura dele foi em relação à região.
+ *
+ * Devolve `null` quando não há gente suficiente na região para o número ser
+ * anônimo — e nesse caso a tela e a mensagem não dizem "sem dados": dizem que
+ * ainda não há vizinhos bastante. A diferença importa, porque a primeira soa
+ * como defeito e a segunda é a verdade.
+ */
+export function benchmarkDoProdutor(ctx, safra, produtorId) {
+  return comContexto(ctx, async (cx) => {
+    // A safra sai do dado quando não vem pedida, como em todo o resto do
+    // caderno. Sem isto a rota sem `?safra=` consultava por nulo e voltava
+    // vazia — e "vazio" aqui é indistinguível de "não há vizinhos bastante",
+    // que é exatamente a confusão que este módulo existe para evitar.
+    const escolhida = safra || (await repo.mediaPorSafra(cx))[0]?.safra;
+    if (!escolhida) return null;
+
+    const onde = await repo.municipioPrincipal(cx, escolhida, produtorId);
+    if (!onde) return null;
+
+    const b = await repo.benchmarkRegional(cx, escolhida, onde.municipio, onde.uf, produtorId);
+    if (!b) {
+      return {
+        municipio: onde.municipio,
+        uf: onde.uf,
+        semGenteBastante: true,
+        minimo: MINIMO_BENCHMARK,
+      };
+    }
+    return {
+      municipio: onde.municipio,
+      uf: onde.uf,
+      nivel: b.nivel,
+      produtores: b.produtores,
+      areaHa: Number(b.area_ha),
+      mediaPonderadaScHa: Number(b.media_ponderada_sc_ha),
+      base: `média de ${b.produtores} outros produtores, ponderada pela área — `
+        + 'sem nome e sem número individual',
+    };
+  });
+}
+
+// Espelha app.benchmark_minimo(). Só para a mensagem poder dizer quantos
+// faltam; quem decide continua sendo o banco.
+const MINIMO_BENCHMARK = 5;
