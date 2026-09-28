@@ -187,6 +187,13 @@ async function responderSobreSafra(ctx, texto) {
   const rede = await caderno.redeContraRegiao(ctx, r.safra);
   if (rede.length) return respostaDaRede(r, rede);
 
+  // Quem tem TERRITÓRIO recebe o território: o que desceu dele contra tudo que
+  // foi plantado ali. É o número do franqueado, e a franquia é exclusiva por
+  // município — a pergunta dele não é "como foi a lavoura dos meus clientes",
+  // é "quanto do que plantaram aqui passou pela marca, e como se compara".
+  const meu = await caderno.benchmarkDoMeuTerritorio(ctx, r.safra);
+  if (meu) return maiuscula(resumoDaSafra(r, linhaDoTerritorio(meu, r)));
+
   // A carteira dele sem nome nenhum não ganha comparação: ela atravessa
   // municípios, e a régua regional é por município — viraria uma lista, que é
   // relatório e não mensagem. Essa abertura existe no painel do gestor.
@@ -430,4 +437,23 @@ function respostaDaRede(r, rede) {
   }
   linhas.push('Cada um contra o próprio território, que inclui quem não comprou da rede.');
   return linhas.join('\n');
+}
+
+/**
+ * A linha do território, quando ele existe.
+ *
+ * Diz de quantos produtores e de quantos municípios é a média, e que ela inclui
+ * quem não comprou dele — sem isso, o franqueado leria o número como se fosse a
+ * média dos clientes dele, que é justamente o outro lado da comparação.
+ */
+function linhaDoTerritorio(t, r) {
+  if (!t || r.mediaPonderadaScHa === null) return null;
+  const n = (v) => Number(v).toLocaleString('pt-BR');
+  const dif = Math.round((r.mediaPonderadaScHa / t.mediaPonderadaScHa - 1) * 1000) / 10;
+  const municipios = t.municipios === 1 ? '1 município' : `${t.municipios} municípios`;
+  // Duas linhas curtas, e não uma de cento e trinta caracteres: no celular a
+  // longa quebra em três e a ressalva fica órfã no fim.
+  return `${dif > 0 ? '+' : ''}${n(dif)}% em relação ao seu território inteiro `
+    + `(${n(t.mediaPonderadaScHa)} sc/ha).`
+    + `\nSão ${t.produtores} produtores em ${municipios}, incluindo quem não comprou de você.`;
 }

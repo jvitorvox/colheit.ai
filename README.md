@@ -398,6 +398,51 @@ A condição é **ter rede**, não ser de um tipo: `redeContraRegiao` devolve va
 para quem não tem, e a revenda cai no resumo de sempre. Há teste fazendo a mesma
 pergunta pelos dois telefones.
 
+### E quem tem território recebe o território
+
+```
+> como foi a safra?
+Safra 26/27: 69,4 sc/ha na média, 3.400 ha colhidos (3 de 3 talhões).
++6,3% em relação ao seu território inteiro (65,3 sc/ha).
+São 8 produtores em 2 municípios, incluindo quem não comprou de você.
+Melhor: Gleba 1, 71,5 sc/ha.
+Média ponderada pela área colhida.
+```
+
+A franquia é exclusiva por município, então a pergunta do franqueado **não** é
+"como foi a lavoura dos meus clientes" — é *quanto do que plantaram aqui passou
+pela marca, e como se compara com o que não passou*.
+
+O denominador é o **território**, não o que ele enxerga: ele vê a lavoura que
+desceu dos pedidos dele, e o território tem muito mais. Há teste comparando os
+dois números.
+
+`incluindo quem não comprou de você` não é enfeite: sem isso ele leria a média
+como se fosse a dos próprios clientes, que é justamente o **outro lado** da
+comparação.
+
+Duas linhas curtas, e não uma de cento e trinta caracteres — no celular a longa
+quebra em três e a ressalva fica órfã no fim.
+
+Mesma disciplina das outras: a condição é `territorio` ter linha apontando para
+o tenant. Revenda, distribuidora e franqueadora não têm, e a função no banco
+simplesmente não devolve nada.
+
+### As três ordens da mesma pergunta
+
+"Como foi a safra?" tem três respostas para a sessão de empresa, nesta ordem:
+
+| Se o texto traz | Resposta |
+|---|---|
+| um **nome de produtor** | a lavoura dele, com a vizinhança dele |
+| nada, e o tenant tem **rede** | cada franqueado contra o território dele |
+| nada, e o tenant tem **território** | o que desceu dele contra o território inteiro |
+| nada, e nenhum dos dois | o resumo da carteira, sem comparação |
+
+Nenhuma dessas condições olha o tipo do tenant. Todas olham se existe o dado —
+que é o que mantém as quatro num arquivo só, sem uma segunda regra de
+visibilidade para manter em dia com a política.
+
 Três desfechos, porque é o que a realidade tem: **um nome** responde por ele,
 **mais de um** devolve a lista e pede o nome mais completo, e **nenhum** vale a
 carteira inteira. Chutar entre dois Sabo seria responder com o número do vizinho.
@@ -1292,6 +1337,7 @@ GET  /caderno/resultado             o fechamento da safra, ponderado pela área
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
 GET  /caderno/resultado-por-franqueado  a safra de cada franqueado da rede
 GET  /caderno/rede-contra-regiao    cada franqueado contra o território dele
+GET  /caderno/meu-territorio        o que desceu de mim contra o território
 GET  /caderno/resultado-por-municipio   a safra por região, sem nomear franqueado
 GET  /caderno/benchmark             a região do produtor, com ele de FORA
 GET  /caderno/benchmark-por-municipio  a carteira contra a região, ela INCLUÍDA

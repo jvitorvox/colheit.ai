@@ -79,3 +79,8 @@ rotasCaderno.get('/benchmark-por-municipio', soEmpresa, rota(async (req, res) =>
 rotasCaderno.get('/rede-contra-regiao', soEmpresa, rota(async (req, res) => {
   res.json(await servico.redeContraRegiao(req.ctx, req.query.safra));
 }));
+
+// O território do próprio franqueado. Vazio para quem não tem território.
+rotasCaderno.get('/meu-territorio', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.benchmarkDoMeuTerritorio(req.ctx, req.query.safra));
+}));

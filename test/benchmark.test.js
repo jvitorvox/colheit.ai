@@ -428,3 +428,71 @@ test('quem não tem rede continua recebendo o resumo de sempre', async () => {
   assert.doesNotMatch(texto, /a rede:/,
     'a condição é ter rede, não ser de um tipo — e ela não tem');
 });
+
+/* ------------------------------- o território no WhatsApp do franqueado */
+
+let tFranqueado;
+
+test('o franqueado recebe o próprio território, não a rede nem a carteira', async () => {
+  // A franquia é exclusiva por município: a pergunta dele não é "como foi a
+  // lavoura dos meus clientes", é "quanto do que plantaram aqui passou pela
+  // marca, e como se compara com o que não passou".
+  const fq = (await dono.query(
+    "select id from tenant where documento = '92000000000192'")).rows[0].id;
+  await criarUsuario(fq, 'Chefe FS Sorriso', 'chefe@fssorriso.com', 'gestor');
+  tFranqueado = await entrar(req, 'chefe@fssorriso.com');
+
+  const tel = '5566999550088';
+  const canal = '5566999000801';
+  await dono.query('update usuario set telefone = $1 where email = $2',
+    [tel, 'chefe@fssorriso.com']);
+  await dono.query(
+    'insert into canal_whatsapp (tenant_id, numero) values ($1,$2) on conflict do nothing',
+    [fq, canal]);
+
+  await fetch(`${base}/captura/mensagens`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    body: JSON.stringify({ de: tel, para: canal, tipo: 'texto', texto: 'como foi a safra?' }),
+  });
+  const saidas = await fetch(`${base}/captura/saidas`, {
+    headers: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+  }).then((x) => x.json());
+  const texto = saidas.at(-1).texto;
+
+  assert.match(texto, /^Safra 26\/27:/);
+  assert.match(texto, /em relação ao seu território inteiro/);
+  assert.match(texto, /São \d+ produtores em \d+ município/);
+  // Sem esta frase o franqueado lê o número como se fosse a média dos clientes
+  // dele, que é justamente o outro lado da comparação.
+  assert.match(texto, /incluindo quem não comprou de você/);
+  assert.doesNotMatch(texto, /a rede:/, 'ele não tem rede');
+});
+
+test('o denominador é o território, e não o que ele enxerga', async () => {
+  const r = await req(`/caderno/meu-territorio?safra=${SAFRA}`, { token: tFranqueado });
+  assert.equal(r.status, 200);
+  assert.ok(r.corpo.produtores >= 5);
+
+  const dele = await req(`/caderno/resultado?safra=${SAFRA}`, { token: tFranqueado });
+  assert.ok(r.corpo.produtores > dele.corpo.talhoes,
+    'ele enxerga a lavoura que desceu dele; o território tem muito mais');
+});
+
+test('quem não tem território não recebe a linha', async () => {
+  const r = await req(`/caderno/meu-territorio?safra=${SAFRA}`, { token: tRevenda });
+  assert.equal(r.status, 200);
+  assert.equal(r.corpo, null,
+    'não é `if` de papel: é `territorio` não ter linha apontando para o tenant');
+});
+
+test('o produtor não alcança a rota de território — ela é da empresa', async () => {
+  const tel = '5566999330022';
+  const cod = await req('/auth/produtor/codigo', { metodo: 'POST', corpo: { telefone: tel } });
+  const ent = await req('/auth/produtor/entrar', {
+    metodo: 'POST', corpo: { telefone: tel, codigo: cod.corpo.codigo },
+  });
+  const r = await req(`/caderno/meu-territorio?safra=${SAFRA}`, { token: ent.corpo.token });
+  assert.equal(r.status, 400);
+  assert.match(r.corpo.erro, /área da empresa/);
+});

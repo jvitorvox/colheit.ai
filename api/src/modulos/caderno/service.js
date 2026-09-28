@@ -448,3 +448,38 @@ export function benchmarkPorMunicipio(ctx, safra) {
 // teto existe porque cada linha é uma ida ao banco, e a tela de abertura não é
 // relatório.
 const MAXIMO_MUNICIPIOS = 8;
+
+/**
+ * O território do próprio franqueado: o que desceu dele contra tudo que foi
+ * plantado ali.
+ *
+ * É o número do negócio dele. A franquia é exclusiva por município — o que ele
+ * quer saber não é como foi a lavoura dos clientes dele em abstrato, e sim
+ * quanto do que foi plantado no território dele passou pela marca, e como essa
+ * lavoura se compara com a que não passou.
+ *
+ * Devolve `null` para quem não tem território — revenda, distribuidora,
+ * franqueadora. Não é `if` de papel: é `territorio` não ter linha apontando
+ * para o tenant, e a função no banco simplesmente não devolver nada.
+ */
+export function benchmarkDoMeuTerritorio(ctx, safra) {
+  if (!ctx?.tenant) return Promise.resolve(null);
+  return comContexto(ctx, async (cx) => {
+    const escolhida = safra
+      ? textoObrigatorio(safra, 'safra', 10)
+      : (await repo.mediaPorSafra(cx))[0]?.safra;
+    if (!escolhida) return null;
+
+    const b = await repo.benchmarkDoTerritorio(cx, escolhida, ctx.tenant);
+    if (!b) return null;
+    return {
+      safra: escolhida,
+      produtores: b.produtores,
+      municipios: b.municipios,
+      areaHa: Number(b.area_ha),
+      mediaPonderadaScHa: Number(b.media_ponderada_sc_ha),
+      base: `média de ${b.produtores} produtores em ${b.municipios} município(s) `
+        + 'do seu território, incluindo quem não comprou de você',
+    };
+  });
+}
