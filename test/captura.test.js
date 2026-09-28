@@ -229,3 +229,105 @@ test('com o extrator ligado, a mensagem já nasce pendente de validação', asyn
   assert.equal(r.corpo.desfecho, 'relato_pendente');
   assert.equal(r.corpo.extratorLigado, true);
 });
+
+/* ------------------------------------------- a safra respondida no WhatsApp */
+
+let talhaoDaSafra;
+
+test('perguntar pela colheita traz o fechamento da safra', async () => {
+  const t = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba 1', areaHa: 800 },
+  });
+  talhaoDaSafra = t.corpo.id;
+  const t2 = await req(`/cadastro/propriedades/${propriedadeId}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba 2', areaHa: 200 },
+  });
+
+  const plantar = async (talhaoId, safra, areaHa, scHa) => {
+    const pl = await req('/caderno/plantios', {
+      metodo: 'POST', token: tRevenda,
+      corpo: { talhaoId, safra, cultivar: 'FS560', marca: 'FS Sementes', areaHa },
+    });
+    assert.equal(pl.status, 201, JSON.stringify(pl.corpo));
+    if (scHa) {
+      await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+        metodo: 'POST', token: tRevenda,
+        corpo: { colhidoEm: '2027-03-08', produtividadeScHa: scHa },
+      });
+    }
+  };
+  await plantar(talhaoDaSafra, '25/26', 800, 55);
+  await plantar(talhaoDaSafra, '26/27', 800, 60);
+  await plantar(t2.corpo.id, '26/27', 200, 80);
+
+  const r = await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu minha colheita?',
+  });
+  assert.equal(r.corpo.desfecho, 'respondido');
+  assert.equal(r.corpo.sobre, 'safra');
+
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  const texto = saidas.corpo.at(-1).texto;
+  assert.match(texto, /Safra 26\/27/);
+  assert.match(texto, /64 sc\/ha/, '(800×60 + 200×80) / 1000 — a média simples daria 70');
+  assert.match(texto, /1\.000 ha colhidos/);
+  assert.match(texto, /Melhor: Gleba 2, 80 sc\/ha/);
+  assert.match(texto, /ponderada pela área/,
+    'a mensagem é encaminhada e vira captura de tela sem contexto em volta');
+});
+
+test('a variação com a safra passada entra na mesma mensagem', async () => {
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'como foi a safra?',
+  });
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  assert.match(saidas.corpo.at(-1).texto, /\+16,4% em relação à safra 25\/26/);
+});
+
+test('pergunta de pedido continua indo para o pedido', async () => {
+  const r = await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'cadê minha carga?',
+  });
+  assert.equal(r.corpo.sobre, 'pedido');
+});
+
+test('"quanto rendeu o pedido" é sobre safra — quem quer o pedido escreve cadê', async () => {
+  const r = await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu o pedido?',
+  });
+  assert.equal(r.corpo.sobre, 'safra');
+});
+
+test('o que não é pergunta continua virando relato de campo', async () => {
+  const r = await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'tem lagarta na bordadura sul',
+  });
+  assert.equal(r.corpo.sobre, undefined);
+  assert.match(r.corpo.desfecho, /relato/);
+});
+
+test('a resposta da safra nunca dispara — ela responde', async () => {
+  // Sem entrada recente não nasce saída: é o banco que recusa, não a disciplina
+  // de quem escreve o gateway.
+  const antes = (await doGateway('/captura/saidas', null, 'GET')).corpo.length;
+  await dono.query(
+    `update mensagem_whatsapp set criado_em = now() - interval '48 hours'
+      where direcao = 'entrada'`);
+  const depois = (await doGateway('/captura/saidas', null, 'GET')).corpo.length;
+  assert.equal(depois, antes, 'nada novo apareceu na fila sozinho');
+});
+
+test('produtor sem plantio nenhum recebe resposta honesta, não um zero', async () => {
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Wilson Kuhn' },
+  });
+  const tel = '5566999887766';
+  await req('/auth/convites', {
+    metodo: 'POST', token: tRevenda, corpo: { produtorId: outro.corpo.id, telefone: tel },
+  });
+  await doGateway('/captura/mensagens', {
+    de: tel, para: NUMERO, tipo: 'texto', texto: 'qual foi minha produtividade?',
+  });
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  assert.match(saidas.corpo.at(-1).texto, /ainda não tenho plantio registrado/i);
+});

@@ -60,10 +60,14 @@ export async function receber(entrada) {
     return { mensagemId: msg.id, desfecho: 'nao_identificado' };
   }
 
-  if (tipo === 'texto' && ehPergunta(entrada.texto)) {
-    const resposta = await responderSobrePedido(quem, tenantId);
+  const pergunta = tipo === 'texto' ? classificar(entrada.texto) : null;
+  if (pergunta) {
+    const ctx = contextoDe(quem, tenantId);
+    const resposta = pergunta === 'safra'
+      ? await responderSobreSafra(ctx)
+      : await responderSobrePedido(ctx);
     await responder(tenantId, telefone, msg.id, resposta);
-    return { mensagemId: msg.id, desfecho: 'respondido' };
+    return { mensagemId: msg.id, desfecho: 'respondido', sobre: pergunta };
   }
 
   // Relato do campo. Sem produtor identificado — caso do consultor mandando a
@@ -93,14 +97,64 @@ export async function receber(entrada) {
   };
 }
 
-const PERGUNTAS = /(cad[eê]|onde|status|chegou|entrega|pedido|nota|boleto)/i;
-const ehPergunta = (t) => PERGUNTAS.test(String(t ?? ''));
+/**
+ * Duas perguntas que o sistema sabe responder, e a ordem importa.
+ *
+ * "Quanto rendeu o meu pedido" bate nas duas listas; safra é testada primeiro
+ * porque quem escreve "rendeu" quer produtividade, e quem quer o pedido escreve
+ * "cadê" ou "chegou".
+ *
+ * É casamento de palavra, não entendimento — e continua sendo, mesmo depois que
+ * o extrator de IA ligar: pergunta respondida por regra é barata, previsível e
+ * não manda o texto do produtor para provedor nenhum. O que a regra não pega
+ * vira relato de campo, que é o destino certo para o resto.
+ */
+const SOBRE_SAFRA = /(safra|colheita|colhi|colheu|rendeu|rendi|rendimento|produtividade|produziu|sc\/ha|por hectare)/i;
+const SOBRE_PEDIDO = /(cad[eê]|onde|status|chegou|entrega|pedido|nota|boleto)/i;
 
-async function responderSobrePedido(quem, tenantId) {
-  const ctx = quem.produtorId
-    ? { produtor: quem.produtorId }
-    : { tenant: tenantId, usuario: quem.usuarioId };
+function classificar(texto) {
+  const t = String(texto ?? '');
+  if (SOBRE_SAFRA.test(t)) return 'safra';
+  if (SOBRE_PEDIDO.test(t)) return 'pedido';
+  return null;
+}
 
+/** O produtor fala por si; o consultor fala pela empresa dele. */
+const contextoDe = (quem, tenantId) => (quem.produtorId
+  ? { produtor: quem.produtorId }
+  : { tenant: tenantId, usuario: quem.usuarioId });
+
+/**
+ * O fechamento da safra em quatro linhas.
+ *
+ * WhatsApp é para ser lido de relance, e mensagem longa não se lê no trator.
+ * Mas a base do número vai junto: é ali que ela mais importa, porque a mensagem
+ * é encaminhada e vira captura de tela sem nenhum contexto em volta.
+ */
+async function responderSobreSafra(ctx) {
+  const r = await caderno.resultadoDaSafra(ctx);
+  if (!r?.safra) return 'Ainda não tenho plantio registrado no seu nome.';
+  if (r.mediaPonderadaScHa === null) {
+    return `Safra ${r.safra}: ainda não há colheita registrada `
+      + `(${r.talhoes} talhão(ões) plantados).`;
+  }
+
+  const n = (v) => Number(v).toLocaleString('pt-BR');
+  const linhas = [
+    `Safra ${r.safra}: ${n(r.mediaPonderadaScHa)} sc/ha na média, `
+    + `${n(r.areaColhidaHa)} ha colhidos (${r.colhidos} de ${r.talhoes} talhões).`,
+  ];
+  if (r.anterior) {
+    linhas.push(`${r.anterior.variacaoPct > 0 ? '+' : ''}${n(r.anterior.variacaoPct)}% `
+      + `em relação à safra ${r.anterior.safra}.`);
+  }
+  const melhor = r.porTalhao.find((t) => t.produtividadeScHa !== null);
+  if (melhor) linhas.push(`Melhor: ${melhor.talhao}, ${n(melhor.produtividadeScHa)} sc/ha.`);
+  linhas.push('Média ponderada pela área colhida.');
+  return linhas.join('\n');
+}
+
+async function responderSobrePedido(ctx) {
   const lista = await pedidos.listar(ctx, { situacao: 'andamento' });
   if (lista.length === 0) return 'Não encontrei pedido em andamento no seu nome.';
 

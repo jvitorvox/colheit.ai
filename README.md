@@ -313,6 +313,36 @@ inserir promoção direto no banco e falha.
 Um número por tenant, como no Construtivo: se um cair, o canal para de um
 cliente, não da plataforma.
 
+### Duas perguntas que o canal sabe responder
+
+| O que ele escreve | O que volta |
+|---|---|
+| "cadê minha carga?", "chegou a nota?" | os pedidos em andamento, com a etapa de cada um |
+| "quanto rendeu a colheita?", "como foi a safra?" | o fechamento da safra em quatro linhas |
+| qualquer outra coisa | vira **relato de campo**, que é o destino certo do resto |
+
+```
+Safra 26/27: 66,3 sc/ha na média, 2.100 ha colhidos (2 de 3 talhões).
++18,6% em relação à safra 25/26.
+Melhor: Gleba 2, 71,2 sc/ha.
+Média ponderada pela área colhida.
+```
+
+Quatro linhas porque mensagem longa não se lê no trator. Mas **a base do número
+vai junto**: é no WhatsApp que ela mais importa, porque a mensagem é encaminhada
+e vira captura de tela sem nenhum contexto em volta.
+
+A safra é testada antes do pedido: "quanto rendeu o pedido" bate nas duas listas,
+e quem escreve "rendeu" quer produtividade — quem quer o pedido escreve "cadê".
+
+É casamento de palavra, não entendimento, e **continua sendo mesmo depois que o
+extrator de IA ligar**: pergunta respondida por regra é barata, previsível e não
+manda o texto do produtor para provedor nenhum.
+
+Nada disso dispara: a resposta só existe porque ele perguntou, e o banco recusa
+mensagem solta. Há teste que envelhece as entradas em 48 horas e confere que a
+fila de saída não cresce sozinha.
+
 ### ⚠️ A extração nasce desligada, e é decisão
 
 Áudio de produtor descrevendo a própria lavoura é o dado mais sensível que o
