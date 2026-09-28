@@ -343,6 +343,40 @@ Nada disso dispara: a resposta só existe porque ele perguntou, e o banco recusa
 mensagem solta. Há teste que envelhece as entradas em 48 horas e confere que a
 fila de saída não cresce sozinha.
 
+### O consultor pergunta pelo nome do produtor
+
+Ele atende muitos: o agregado da carteira diz menos que o nome que ele vai
+visitar daqui a dez minutos.
+
+```
+> como foi a safra do Sabo?
+José Cesar Sabo — safra 26/27: 63,9 sc/ha na média, 1.800 ha colhidos (1 de 1).
++10,4% em relação à safra 25/26.
+Melhor: Gleba 1, 63,9 sc/ha.
+Média ponderada pela área colhida.
+```
+
+Três desfechos, porque é o que a realidade tem: **um nome** responde por ele,
+**mais de um** devolve a lista e pede o nome mais completo, e **nenhum** vale a
+carteira inteira. Chutar entre dois Sabo seria responder com o número do vizinho.
+
+A busca **não sabe o que é carteira** — quem limita é a política, e ela limita.
+Há teste em que o consultor pergunta pelo "Sabo da Concorrente" e a resposta não
+o menciona.
+
+Palavras de pergunta entram numa lista de ruído: sem ela, "como foi a colheita?"
+procuraria um produtor chamado "Fazenda Boa Colheita" e o encontraria. E **só o
+consultor** procura nome: o produtor fala de uma lavoura só — a dele —, e
+procurar nome no texto dele só criaria chance de errar.
+
+> ⚠️ **A regra não tem memória da mensagem anterior.**
+>
+> "como foi a safra do Sabo?" funciona; "e a da Marli?" logo em seguida **não** —
+> não há palavra de safra nela, então vira relato de campo, sem resposta. É o
+> preço de não manter estado de conversa, e o contorno é escrever "e a safra da
+> Marli?". Fica registrado porque é o tipo de coisa que parece defeito quando se
+> usa pela primeira vez.
+
 ### ⚠️ A extração nasce desligada, e é decisão
 
 Áudio de produtor descrevendo a própria lavoura é o dado mais sensível que o

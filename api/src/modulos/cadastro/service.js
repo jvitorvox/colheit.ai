@@ -184,3 +184,37 @@ export { soDigitos };
 export function minhaLavoura(ctx) {
   return comContexto(ctx, (cx) => repo.minhaLavoura(cx));
 }
+
+// Palavras que aparecem em toda pergunta e não são nome de ninguém. Sem esta
+// lista, "como foi a safra do Sabo" procuraria por "safra" e acharia qualquer
+// produtor cujo nome contivesse isso.
+const RUIDO = new Set([
+  'como', 'foi', 'esta', 'está', 'qual', 'quanto', 'quantas', 'safra', 'colheita',
+  'colheu', 'colhi', 'rendeu', 'rendimento', 'produtividade', 'produziu', 'para',
+  'com', 'por', 'dos', 'das', 'sobre', 'hectare', 'saca', 'sacas', 'talhao',
+  'talhão', 'lavoura', 'fazenda', 'sitio', 'sítio', 'resultado', 'numero',
+]);
+
+/**
+ * Acha um produtor a partir de um texto solto — a pergunta do WhatsApp.
+ *
+ * Devolve `{ achado }`, `{ ambiguos }` ou nada. Três desfechos porque é o que
+ * a realidade tem: o consultor escreve "safra do Sabo", e "Sabo" pode ser dois
+ * produtores. Chutar um deles seria responder com o número do vizinho.
+ *
+ * A política já limita o alcance à carteira dele — a busca não precisa saber
+ * disso, e não sabe.
+ */
+export function procurarProdutorNoTexto(ctx, texto) {
+  const termos = String(texto ?? '')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((t) => t.length >= 3 && !RUIDO.has(t.toLowerCase()));
+  if (termos.length === 0) return Promise.resolve({});
+
+  return comContexto(ctx, async (cx) => {
+    const achados = await repo.procurarProdutores(cx, termos);
+    if (achados.length === 0) return {};
+    if (achados.length === 1) return { achado: achados[0] };
+    return { ambiguos: achados };
+  });
+}

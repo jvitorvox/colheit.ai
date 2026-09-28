@@ -331,3 +331,93 @@ test('produtor sem plantio nenhum recebe resposta honesta, não um zero', async 
   const saidas = await doGateway('/captura/saidas', null, 'GET');
   assert.match(saidas.corpo.at(-1).texto, /ainda não tenho plantio registrado/i);
 });
+
+/* ------------------------------------ o consultor pergunta pelo produtor */
+
+let telConsultor;
+
+test('o consultor pergunta pela safra de um produtor pelo nome', async () => {
+  // Ele atende muitos: o agregado da carteira diz menos que o nome que ele
+  // vai visitar daqui a dez minutos.
+  telConsultor = '5566999112233';
+  await dono.query('update usuario set telefone = $1 where email = $2',
+    [telConsultor, 'gestora@3t.com']);
+
+  const r = await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto',
+    texto: 'como foi a safra do Sabo?',
+  });
+  assert.equal(r.corpo.sobre, 'safra');
+
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  const texto = saidas.corpo.at(-1).texto;
+  assert.match(texto, /^José Cesar Sabo — safra 26\/27/,
+    'a resposta abre com o nome de quem ele perguntou');
+  assert.match(texto, /64 sc\/ha/);
+  assert.match(texto, /ponderada pela área/);
+});
+
+test('nome que casa com mais de um não vira chute', async () => {
+  // Responder com o número do vizinho é pior do que perguntar de novo.
+  await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'José Antônio Sabo Filho' },
+  });
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu a lavoura do Sabo?',
+  });
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  const texto = saidas.corpo.at(-1).texto;
+  assert.match(texto, /Achei mais de um/);
+  assert.match(texto, /José Cesar Sabo/);
+  assert.match(texto, /José Antônio Sabo Filho/);
+});
+
+test('sem nome no texto, ele recebe a carteira inteira', async () => {
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'como foi a safra?',
+  });
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  assert.match(saidas.corpo.at(-1).texto, /^Safra 26\/27/,
+    'sem nome não há a quem atribuir — vale o que ele enxerga inteiro');
+});
+
+test('palavra de pergunta não é nome de produtor', async () => {
+  // Sem a lista de ruído, "safra" e "colheita" procurariam produtor e
+  // achariam qualquer um cujo nome contivesse a palavra.
+  const r = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Fazenda Boa Colheita' },
+  });
+  assert.equal(r.status, 201);
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'como foi a colheita?',
+  });
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  assert.match(saidas.corpo.at(-1).texto, /^Safra 26\/27/,
+    'a pergunta genérica continua genérica');
+});
+
+test('o produtor não procura nome nenhum — ele fala de uma lavoura só', async () => {
+  const r = await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'como foi a safra do Sabo?',
+  });
+  assert.equal(r.corpo.sobre, 'safra');
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  assert.match(saidas.corpo.at(-1).texto, /^Safra 26\/27/,
+    'procurar nome no texto dele só criaria chance de errar');
+});
+
+test('o consultor não alcança produtor fora do que a política deixa', async () => {
+  const outra = await criarTenant('Agro Sul', '33333333000133', 'distribuidor');
+  await criarUsuario(outra, 'Gestor Sul', 'gestor@sul.com', 'gestor');
+  const tOutra = await entrar(req, 'gestor@sul.com');
+  await req('/cadastro/produtores', {
+    metodo: 'POST', token: tOutra, corpo: { nome: 'Sabo da Concorrente' },
+  });
+
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'safra do Sabo da Concorrente',
+  });
+  const saidas = await doGateway('/captura/saidas', null, 'GET');
+  assert.doesNotMatch(saidas.corpo.at(-1).texto, /Concorrente/,
+    'a busca não sabe de carteira — quem limita é a política, e ela limita');
+});

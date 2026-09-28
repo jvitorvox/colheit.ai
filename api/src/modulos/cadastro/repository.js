@@ -151,3 +151,25 @@ export async function minhaLavoura(cx) {
      order by pr.nome`);
   return rows;
 }
+
+/**
+ * Procura produtor por pedaço de nome, dentro do que o chamador enxerga.
+ *
+ * `unaccent` não está instalado, e instalar extensão por causa de uma busca de
+ * WhatsApp seria caro demais para o ganho. `lower` + `like` resolve "jose" para
+ * "José"? Não — e é por isso que a comparação é feita sobre o nome COM acento
+ * de um lado e o termo como foi escrito do outro, aceitando que quem escreve
+ * "jose" sem acento não é encontrado. O consultor escreve o nome que ele lê na
+ * tela, e ficar adivinhando acento erraria mais do que acerta.
+ */
+export async function procurarProdutores(cx, termos) {
+  const { rows } = await cx.query(`
+    select p.id, p.nome
+      from produtor p
+     where p.fundido_em is null
+       and exists (select 1 from unnest($1::text[]) t
+                    where lower(p.nome) like '%' || lower(t) || '%')
+     order by p.nome
+     limit 5`, [termos]);
+  return rows;
+}

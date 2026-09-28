@@ -6,6 +6,7 @@ import { extrair, extratorLigado } from './extrator.js';
 import * as pedidos from '../pedidos/service.js';
 import * as visitas from '../visitas/service.js';
 import * as caderno from '../caderno/service.js';
+import * as cadastro from '../cadastro/service.js';
 import * as midia from '../midia/service.js';
 import { textoObrigatorio, umDe, uuidValido } from '../cadastro/validar.js';
 
@@ -64,7 +65,7 @@ export async function receber(entrada) {
   if (pergunta) {
     const ctx = contextoDe(quem, tenantId);
     const resposta = pergunta === 'safra'
-      ? await responderSobreSafra(ctx)
+      ? await responderSobreSafra(ctx, entrada.texto)
       : await responderSobrePedido(ctx);
     await responder(tenantId, telefone, msg.id, resposta);
     return { mensagemId: msg.id, desfecho: 'respondido', sobre: pergunta };
@@ -131,17 +132,50 @@ const contextoDe = (quem, tenantId) => (quem.produtorId
  * Mas a base do número vai junto: é ali que ela mais importa, porque a mensagem
  * é encaminhada e vira captura de tela sem nenhum contexto em volta.
  */
-async function responderSobreSafra(ctx) {
+async function responderSobreSafra(ctx, texto) {
+  // Só o consultor pergunta por outra pessoa. O produtor fala de uma lavoura
+  // só — a dele —, e procurar nome no texto dele só criaria chance de errar.
+  if (ctx.tenant) {
+    const { achado, ambiguos } = await cadastro.procurarProdutorNoTexto(ctx, texto);
+    if (ambiguos) {
+      return `Achei mais de um: ${ambiguos.map((p) => p.nome).join(', ')}.\n`
+        + 'Escreva o nome mais completo.';
+    }
+    if (achado) {
+      const dele = await caderno.resultadoDaSafra(ctx, null, achado.id);
+      return `${achado.nome} — ${resumoDaSafra(dele)}`;
+    }
+  }
+
   const r = await caderno.resultadoDaSafra(ctx);
-  if (!r?.safra) return 'Ainda não tenho plantio registrado no seu nome.';
+  if (!r?.safra) {
+    return ctx.tenant
+      ? 'Ainda não tenho plantio registrado na sua carteira.'
+      : 'Ainda não tenho plantio registrado no seu nome.';
+  }
+  return maiuscula(resumoDaSafra(r));
+}
+
+/** Quando a frase ABRE a mensagem, a primeira letra sobe. */
+const maiuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/**
+ * O fechamento da safra em quatro linhas.
+ *
+ * Uma função só para os dois casos — a carteira do consultor e o produtor que
+ * ele nomeou — porque a forma da resposta não muda, e duas versões divergiriam
+ * na primeira vez que alguém mexesse numa delas.
+ */
+function resumoDaSafra(r) {
+  if (!r?.safra) return 'não tenho plantio registrado.';
   if (r.mediaPonderadaScHa === null) {
-    return `Safra ${r.safra}: ainda não há colheita registrada `
+    return `safra ${r.safra}: ainda não há colheita registrada `
       + `(${r.talhoes} talhão(ões) plantados).`;
   }
 
   const n = (v) => Number(v).toLocaleString('pt-BR');
   const linhas = [
-    `Safra ${r.safra}: ${n(r.mediaPonderadaScHa)} sc/ha na média, `
+    `safra ${r.safra}: ${n(r.mediaPonderadaScHa)} sc/ha na média, `
     + `${n(r.areaColhidaHa)} ha colhidos (${r.colhidos} de ${r.talhoes} talhões).`,
   ];
   if (r.anterior) {
