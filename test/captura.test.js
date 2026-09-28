@@ -585,3 +585,143 @@ test('a carteira sem nome não ganha comparação — ela atravessa municípios'
   assert.doesNotMatch(texto, /outros produtores/,
     'a régua regional é por município; numa carteira viraria lista');
 });
+
+/* --------------------- a vizinhança na resposta do PRODUTOR */
+//
+// O caminho do produtor é o que carrega a regra de privacidade, e era o que
+// estava sem teste no nível da mensagem: a linha existia e funcionava, mas
+// nada impedia que sumisse — ou, pior, que aparecesse abaixo do piso.
+
+test('o produtor NÃO recebe a região enquanto não houver vizinhos bastante', async () => {
+  // Um produtor sozinho num município novo. O teste não pode depender de
+  // quantos vizinhos os testes anteriores criaram — e Água Boa está vazia.
+  const p = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Isolado do Cerrado' },
+  });
+  const f = await req('/cadastro/propriedades', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      nome: 'Fazenda Isolada', produtorId: p.corpo.id,
+      municipio: 'Água Boa', uf: 'MT', areaHa: 700,
+    },
+  });
+  const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba só', areaHa: 700 },
+  });
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: tRevenda,
+    corpo: {
+      talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS560',
+      marca: 'FS Sementes', areaHa: 700,
+    },
+  });
+  await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+    metodo: 'POST', token: tRevenda,
+    corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 59 },
+  });
+
+  const tel = '5566999001122';
+  await req('/auth/convites', {
+    metodo: 'POST', token: tRevenda, corpo: { produtorId: p.corpo.id, telefone: tel },
+  });
+  await doGateway('/captura/mensagens', {
+    de: tel, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu minha colheita?',
+  });
+
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^Safra 26\/27/);
+  // Água Boa não tem cinco; o estado tem, e é para lá que a régua sobe — então
+  // o que se verifica é que ela NUNCA fala do município abaixo do piso.
+  assert.doesNotMatch(texto, /produtores de Água Boa/,
+    'município abaixo do piso nunca vira média — sobe para o estado ou some');
+});
+
+test('com cinco vizinhos, a região entra na mensagem dele', async () => {
+  const municipio = (await req('/cadastro/propriedades', { token: tRevenda }))
+    .corpo.find((p) => p.id === propriedadeId).municipio;
+
+  for (let i = 1; i <= 5; i++) {
+    const p = await req('/cadastro/produtores', {
+      metodo: 'POST', token: tRevenda, corpo: { nome: `Vizinho de porteira ${i}` },
+    });
+    const f = await req('/cadastro/propriedades', {
+      metodo: 'POST', token: tRevenda,
+      corpo: {
+        nome: `Fazenda Porteira ${i}`, produtorId: p.corpo.id,
+        municipio, uf: 'MT', areaHa: 400,
+      },
+    });
+    const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+      metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba única', areaHa: 400 },
+    });
+    const pl = await req('/caderno/plantios', {
+      metodo: 'POST', token: tRevenda,
+      corpo: {
+        talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS560',
+        marca: 'FS Sementes', areaHa: 400,
+      },
+    });
+    await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+      metodo: 'POST', token: tRevenda,
+      corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 50 + i },
+    });
+  }
+
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'quanto rendeu minha colheita?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  const linhas = texto.split('\n');
+
+  assert.match(texto, /outros produtores de .+ que estão aqui/);
+  assert.match(texto, /\(\d+(,\d+)? sc\/ha\)/, 'a média da região vem no número');
+  // "que estão aqui" não é enfeite: não é a média do município, é a de quem
+  // está no sistema. Sem isso o produtor lê um número de outra ordem.
+  assert.match(texto, /que estão aqui/);
+
+  // As duas comparações ficam juntas, e a base fecha a mensagem.
+  assert.match(linhas[1], /em relação à safra/);
+  assert.match(linhas[2], /outros produtores/);
+  assert.match(linhas.at(-1), /^Média ponderada pela área colhida\.$/);
+});
+
+test('a régua dele exclui ele mesmo — nunca se compara consigo', async () => {
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  const daRegiao = Number(texto.match(/\((\d+(?:,\d+)?) sc\/ha\)/)[1].replace(',', '.'));
+  const dele = Number(texto.match(/^Safra [\d/]+: (\d+(?:,\d+)?) sc\/ha/)[1].replace(',', '.'));
+  assert.notEqual(daRegiao, dele, 'se ele entrasse na própria média, os dois convergiriam');
+
+  const pelaRota = await req('/caderno/benchmark', { token: tProdutor });
+  assert.equal(pelaRota.corpo.mediaPonderadaScHa, daRegiao,
+    'a mensagem e o portal contam a mesma coisa');
+});
+
+test('a resposta de talhão não traz a região — são duas comparações diferentes', async () => {
+  // Talhão contra a lavoura dele numa mensagem; lavoura contra a vizinhança em
+  // outra. Juntar as duas na mesma mensagem confundiria as réguas.
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'e a Gleba 2, quanto rendeu?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^Gleba 2:/);
+  assert.match(texto, /média da sua lavoura/);
+  assert.doesNotMatch(texto, /outros produtores/);
+});
+
+test('a região que ele vê é a mesma que o consultor leva à porteira', async () => {
+  // O produtor e o consultor perguntam pela mesma lavoura por caminhos
+  // diferentes; a régua tem de ser a mesma, senão um dos dois está errado na
+  // frente do outro.
+  await doGateway('/captura/mensagens', {
+    de: TEL, para: NUMERO, tipo: 'texto', texto: 'como foi a safra?',
+  });
+  const dele = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'como foi a safra do Cesar?',
+  });
+  const doConsultor = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+
+  const regiao = (t) => t.match(/\((\d+(?:,\d+)?) sc\/ha\)/)[1];
+  assert.equal(regiao(doConsultor), regiao(dele));
+});

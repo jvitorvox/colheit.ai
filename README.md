@@ -603,6 +603,20 @@ não precisa saber que existe uma régua que ainda não alcançou; dizer isso o
 faria voltar semana que vem esperando um número que depende de quantos vizinhos
 dele entraram no sistema.
 
+**A resposta de talhão não traz a região.** "Gleba 2 rendeu tanto" se compara com
+a lavoura dele; a lavoura se compara com a vizinhança. São duas réguas, e juntá-
+las na mesma mensagem confundiria qual é qual.
+
+E o produtor e o consultor, perguntando pela mesma lavoura por caminhos
+diferentes, recebem **o mesmo número** — há teste comparando as duas mensagens,
+porque um dos dois estaria errado na frente do outro.
+
+⚠️ `região` e `vizinhos` **não** são palavras de pergunta. "Como foi a região?"
+vira relato de campo, sem resposta. Foi escolha: um relato dizendo "a região do
+pivô está boa" seria engolido como pergunta, e perder registro de campo é pior
+que não responder. Ele recebe a régua na pergunta que faz de verdade — "quanto
+rendeu minha colheita?".
+
 
 ### Ele não sabe quem consulta, mas sabe quem entrou na porteira
 
