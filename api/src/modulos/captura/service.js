@@ -143,7 +143,13 @@ async function responderSobreSafra(ctx, texto) {
     }
     if (achado) {
       const dele = await caderno.resultadoDaSafra(ctx, null, achado.id);
-      return `${achado.nome} — ${resumoDaSafra(dele)}`;
+      // A vizinhança daquele produtor entra junto: é o que ele vai dizer na
+      // porteira daqui a dez minutos, e buscar depois seria uma segunda
+      // mensagem para a mesma pergunta.
+      const b = dele?.safra
+        ? await caderno.benchmarkDoProdutor(ctx, dele.safra, achado.id)
+        : null;
+      return `${achado.nome} — ${resumoDaSafra(dele, linhaDoBenchmark(b, dele))}`;
     }
   }
 
@@ -172,6 +178,9 @@ async function responderSobreSafra(ctx, texto) {
     return maiuscula(resumoDaSafra(r, linhaDoBenchmark(b, r)));
   }
 
+  // A carteira dele sem nome nenhum não ganha comparação: ela atravessa
+  // municípios, e a régua regional é por município — viraria uma lista, que é
+  // relatório e não mensagem. Essa abertura existe no painel do gestor.
   return maiuscula(resumoDaSafra(r));
 }
 
@@ -215,6 +224,10 @@ const maiuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1);
  */
 function resumoDaSafra(r, comparacao) {
   if (!r?.safra) return 'não tenho plantio registrado.';
+  // Zero talhão não é "sem colheita", é sem plantio. "(0 talhão(ões)
+  // plantados)" descreveria uma safra fracassada onde há apenas ausência de
+  // registro — a mesma distinção que o cartão do painel faz.
+  if (r.talhoes === 0) return `não tenho plantio registrado na safra ${r.safra}.`;
   if (r.mediaPonderadaScHa === null) {
     return `safra ${r.safra}: ainda não há colheita registrada `
       + `(${r.talhoes} talhão(ões) plantados).`;
@@ -360,7 +373,9 @@ export async function guardarMidia({ numeroDoCanal, telefone, mime, bytes }) {
  * aqui dentro.
  */
 function linhaDoBenchmark(b, r) {
-  if (!b || b.semGenteBastante || r.mediaPonderadaScHa === null) return null;
+  // `r` pode ser nulo: produtor nomeado que não tem plantio nenhum. Sem esta
+  // guarda, perguntar por ele derrubaria a resposta inteira.
+  if (!b || b.semGenteBastante || !r || r.mediaPonderadaScHa === null) return null;
   const dif = Math.round((r.mediaPonderadaScHa / b.mediaPonderadaScHa - 1) * 1000) / 10;
   const n = (v) => Number(v).toLocaleString('pt-BR');
   const onde = b.nivel === 'município' ? b.municipio : b.uf;

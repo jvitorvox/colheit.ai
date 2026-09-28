@@ -349,12 +349,26 @@ Ele atende muitos: o agregado da carteira diz menos que o nome que ele vai
 visitar daqui a dez minutos.
 
 ```
-> como foi a safra do Sabo?
-José Cesar Sabo — safra 26/27: 63,9 sc/ha na média, 1.800 ha colhidos (1 de 1).
-+10,4% em relação à safra 25/26.
-Melhor: Gleba 1, 63,9 sc/ha.
+> como foi a safra do Cesar?
+José Cesar Sabo — safra 26/27: 68,4 sc/ha na média, 1.800 ha colhidos (1 de 1).
++20% em relação à safra 25/26.
++15,3% em relação a 6 outros produtores de Sorriso que estão aqui (59,3 sc/ha).
+Melhor: Gleba 1, 68,4 sc/ha.
 Média ponderada pela área colhida.
 ```
+
+**A vizinhança vem na mesma mensagem**, porque é o que ele vai dizer na porteira
+daqui a dez minutos — e uma segunda ida seria uma segunda pergunta.
+
+A régua muda de produtor para produtor, porque cada um é excluído da própria:
+perguntar pelo Cesar dá região de 59,3, perguntar pela Marli dá 62,8. Isso **não
+revela nada novo** — a diferença entre as duas consultas mistura as lavouras do
+Cesar e da Marli, e ele já vê as duas. Excluir só quem se consulta é o que
+mantém a régua honesta sem virar alavanca.
+
+**A carteira sem nome não ganha comparação.** Ela atravessa municípios, e a régua
+regional é por município: viraria uma lista, que é relatório e não mensagem. Essa
+abertura existe no painel do gestor.
 
 Três desfechos, porque é o que a realidade tem: **um nome** responde por ele,
 **mais de um** devolve a lista e pede o nome mais completo, e **nenhum** vale a

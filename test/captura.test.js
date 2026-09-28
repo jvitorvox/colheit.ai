@@ -519,3 +519,69 @@ test('o talhão de outro produtor não é alcançável pelo nome', async () => {
     'a busca não sabe de dono — quem limita é a política, e ela limita');
   assert.match(texto, /^Safra 26\/27/);
 });
+
+/* ------------------------- a vizinhança na resposta do consultor */
+
+test('a safra que o consultor pede vem com a região do produtor', async () => {
+  // Cinco vizinhos no mesmo município, para o piso fechar.
+  for (let i = 1; i <= 5; i++) {
+    const p = await req('/cadastro/produtores', {
+      metodo: 'POST', token: tRevenda, corpo: { nome: `Vizinho do Sabo ${i}` },
+    });
+    const f = await req('/cadastro/propriedades', {
+      metodo: 'POST', token: tRevenda,
+      corpo: {
+        nome: `Fazenda Vizinho ${i}`, produtorId: p.corpo.id,
+        municipio: 'Sorriso', uf: 'MT', areaHa: 400,
+      },
+    });
+    const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+      metodo: 'POST', token: tRevenda, corpo: { nome: 'Gleba única', areaHa: 400 },
+    });
+    const pl = await req('/caderno/plantios', {
+      metodo: 'POST', token: tRevenda,
+      corpo: {
+        talhaoId: t.corpo.id, safra: '26/27', cultivar: 'FS560',
+        marca: 'FS Sementes', areaHa: 400,
+      },
+    });
+    await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+      metodo: 'POST', token: tRevenda,
+      corpo: { colhidoEm: '2027-03-08', produtividadeScHa: 50 + i },
+    });
+  }
+
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'como foi a safra do Cesar?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^José Cesar Sabo — safra/);
+  assert.match(texto, /outros produtores de Sorriso que estão aqui/,
+    'é o que ele vai dizer na porteira daqui a dez minutos');
+  assert.match(texto, /ponderada pela área/);
+});
+
+test('produtor nomeado sem plantio não derruba a resposta', async () => {
+  // `linhaDoBenchmark` recebe nulo neste caminho; sem guarda, a mensagem
+  // inteira morria por causa de quem não tem lavoura registrada.
+  await req('/cadastro/produtores', {
+    metodo: 'POST', token: tRevenda, corpo: { nome: 'Genoveva Semlavoura' },
+  });
+  const r = await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'safra da Genoveva?',
+  });
+  assert.equal(r.corpo.sobre, 'safra');
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /Genoveva Semlavoura — não tenho plantio registrado na safra/,
+    "zero talhão é ausência de registro, não safra fracassada");
+});
+
+test('a carteira sem nome não ganha comparação — ela atravessa municípios', async () => {
+  await doGateway('/captura/mensagens', {
+    de: telConsultor, para: NUMERO, tipo: 'texto', texto: 'como foi a safra?',
+  });
+  const texto = (await doGateway('/captura/saidas', null, 'GET')).corpo.at(-1).texto;
+  assert.match(texto, /^Safra 26\/27/);
+  assert.doesNotMatch(texto, /outros produtores/,
+    'a régua regional é por município; numa carteira viraria lista');
+});
