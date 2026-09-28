@@ -384,3 +384,90 @@ test('o melhor e o pior talhão vêm com o nome da fazenda', async () => {
       .then((r) => r.rows[0].n));
   assert.equal(vistos, 0, 'franqueado sem pedido naquela terra não alcança o vínculo');
 });
+
+/* ---------------------------------------------- o painel da franqueadora */
+
+let tFranqueadora, fqA, fqB;
+
+test('a franqueadora enxerga a cadeia inteira que desce da rede dela', async () => {
+  const fa = await criarTenant('Indústria FS', '91666666000191', 'franqueadora');
+  await criarUsuario(fa, 'Diretor', 'diretor@fs.com', 'gestor');
+  tFranqueadora = await entrar(req, 'diretor@fs.com');
+
+  fqA = (await dono.query("select id from tenant where documento = '44444444000144'")).rows[0].id;
+  fqB = await criarTenant('FS Norte', '92777777000192', 'franqueado');
+  await dono.query(
+    'insert into rede (franqueado_id, franqueadora_id) values ($1,$3),($2,$3)', [fqA, fqB, fa]);
+
+  const p = (await painel(tFranqueadora)).corpo;
+  assert.ok(p.venda.quantidadeSc > 0, 'ela vê o que a rede dela vendeu');
+  assert.ok(p.resultado, 'e a safra dos talhões que descem dos pedidos da rede');
+});
+
+test('uma franqueadora não sabe das transações da outra', async () => {
+  // É a regra que o desenho fixa, e o alcance pendura no carimbo do pedido:
+  // "pedido cujo franqueado é meu", nunca "tudo que aconteceu no município".
+  const rival = await criarTenant('Indústria Rival', '88888888000188', 'franqueadora');
+  await criarUsuario(rival, 'Diretor Rival', 'rival@ind.com', 'gestor');
+  const tRival = await entrar(req, 'rival@ind.com');
+
+  const p = (await painel(tRival)).corpo;
+  assert.equal(p.venda.quantidadeSc, 0);
+  assert.equal(p.resultado, null);
+  assert.equal(p.rede, null, 'rede vazia não vira cartão');
+
+  const vistos = await comContexto({ tenant: rival }, (cx) =>
+    cx.query('select count(*)::int as n from pedido').then((r) => r.rows[0].n));
+  assert.equal(vistos, 0, 'nem um pedido da concorrente');
+});
+
+test('a rede vem aberta por franqueado, com o nome de cada um', async () => {
+  // Um segundo franqueado, com território e venda própria, para haver comparação.
+  await dono.query(
+    'insert into territorio (municipio, uf, franqueado_id) values ($1,$2,$3)',
+    ['Sinop', 'MT', fqB]);
+  const outro = await req('/cadastro/produtores', {
+    metodo: 'POST', token: tGestor, corpo: { nome: 'Produtor do Norte' },
+  });
+  const f = await req('/cadastro/propriedades', {
+    metodo: 'POST', token: tGestor,
+    corpo: { nome: 'Fazenda Norte', produtorId: outro.corpo.id, municipio: 'Sinop', uf: 'MT' },
+  });
+  const t = await req(`/cadastro/propriedades/${f.corpo.id}/talhoes`, {
+    metodo: 'POST', token: tGestor, corpo: { nome: 'Chapada', areaHa: 500 },
+  });
+  await req('/pedidos', {
+    metodo: 'POST', token: tGestor,
+    corpo: {
+      numero: 'PED-FQB-1', safra: SAFRA, produtorId: outro.corpo.id,
+      propriedadeId: f.corpo.id, itens: [{ cultivar: 'FS560', quantidade: 200, precoUnit: 300 }],
+    },
+  });
+  const pl = await req('/caderno/plantios', {
+    metodo: 'POST', token: tGestor,
+    corpo: {
+      talhaoId: t.corpo.id, safra: SAFRA, cultivar: 'FS560',
+      marca: 'FS Sementes', areaHa: 500,
+    },
+  });
+  await req(`/caderno/plantios/${pl.corpo.id}/colheita`, {
+    metodo: 'POST', token: tGestor,
+    corpo: { colhidoEm: '2027-03-10', produtividadeScHa: 90 },
+  });
+
+  const p = (await painel(tFranqueadora)).corpo;
+  assert.ok(p.rede, 'com dois franqueados, a rede vira cartão');
+  assert.equal(p.rede.length, 2);
+  assert.deepEqual(p.rede.map((f2) => f2.franqueado).sort(), ['FS Norte', 'FS Sementes'],
+    'ela alcança o NOME do franqueado dela, senão o painel seria uma lista de uuid');
+  assert.equal(p.rede[0].mediaPonderadaScHa, 90, 'ordenada pela produtividade');
+});
+
+test('o franqueado continua vendo só o território dele, não a rede', async () => {
+  const p = (await painel(tFranqueado)).corpo;
+  assert.equal(p.rede, null, 'um franqueado só não tem comparação a fazer');
+
+  const safra = (await req(`/caderno/resultado?safra=${SAFRA}`, { token: tFranqueado })).corpo;
+  assert.ok(!safra.porTalhao.some((t) => t.talhao === 'Chapada'),
+    'e a lavoura do outro franqueado não entra na safra dele');
+});

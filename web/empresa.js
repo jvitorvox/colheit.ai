@@ -239,6 +239,7 @@ async function telaPainel(main) {
   main.append(n);
 
   if (p.operacao) main.append(cartaoGargalo(p.operacao));
+  if (p.rede) main.append(cartaoRede(p.rede));
   if (p.resultado) main.append(cartaoResultado(p.resultado));
   if (p.campo) main.append(cartaoCampo(p.campo));
   if (p.carteira) main.append(cartaoCarteira(p.carteira));
@@ -280,6 +281,47 @@ function cartaoGargalo(op) {
   c.append(lista);
   c.append(el('p', 'detalhe',
     `Pedidos e mediana de dias parado. Acima de ${op.corteDias} dias fica marcado.`));
+  return c;
+}
+
+/**
+ * A rede, franqueado a franqueado.
+ *
+ * Só aparece para quem enxerga mais de um — na prática, a franqueadora. É o
+ * recorte que não existe em nenhuma outra tela: qual franqueado está
+ * entregando lavoura melhor.
+ *
+ * A comparação entre eles carrega a mesma ressalva das outras: são territórios
+ * diferentes, com solo, clima e manejo diferentes. Quem está no topo pode
+ * apenas ter a melhor terra.
+ */
+function cartaoRede(rede) {
+  const c = el('div', 'cartao');
+  c.append(el('p', 'rotulo', 'A rede, por franqueado'));
+
+  const comNumero = rede.filter((f) => f.mediaPonderadaScHa !== null);
+  const maior = Math.max(1, ...comNumero.map((f) => f.mediaPonderadaScHa));
+
+  rede.forEach((f) => {
+    const l = el('div', 'faixa-etapa');
+    const medidor = el('div', 'medidor');
+    if (f.mediaPonderadaScHa !== null) {
+      const barra = el('i');
+      barra.style.width = `${(f.mediaPonderadaScHa / maior) * 100}%`;
+      medidor.append(barra);
+    }
+    l.append(el('span', null, f.franqueado), medidor,
+      el('span', 'num', f.mediaPonderadaScHa === null
+        ? 'sem colheita'
+        : `${num(f.mediaPonderadaScHa)} sc/ha`));
+    c.append(l);
+    c.append(el('p', 'detalhe',
+      `${num(f.areaColhidaHa)} ha colhidos · ${f.colhidos} de ${f.talhoes} talhões`));
+  });
+
+  c.append(el('p', 'detalhe',
+    'Territórios diferentes, com solo, clima e manejo diferentes — quem está no '
+    + 'topo pode apenas ter a melhor terra.'));
   return c;
 }
 
@@ -339,7 +381,13 @@ function cartaoResultado(r) {
   // painel com várias fazendas os dois extremos sairiam iguais.
   const extremo = (t) => [t.produtor, t.talhao, `${num(t.produtividadeScHa)} sc/ha`, t.cultivar]
     .filter(Boolean).join(' · ');
-  [['Melhor', r.melhores[0]], ['Pior', r.piores[0]]].filter(([, t]) => t).forEach(([rot, t]) => {
+  // Com um talhão colhido só, melhor e pior são a mesma linha — mostrar as duas
+  // seria encher a tela repetindo o mesmo dado.
+  const extremos = r.melhores[0] && r.piores[0]
+    && r.melhores[0].plantioId !== r.piores[0].plantioId
+    ? [['Melhor', r.melhores[0]], ['Pior', r.piores[0]]]
+    : [['Colhido', r.melhores[0]]];
+  extremos.filter(([, t]) => t).forEach(([rot, t]) => {
     const l = el('div', 'linha');
     l.append(el('span', 'id', rot), el('span', null, extremo(t)));
     c.append(l);

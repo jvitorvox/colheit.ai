@@ -229,3 +229,44 @@ export async function resultadoPorOrigem(cx, safra) {
      group by 1`, [safra]);
   return rows;
 }
+
+/**
+ * A safra aberta por franqueado.
+ *
+ * Só diz alguma coisa para a franqueadora, que é quem enxerga mais de um. Para
+ * qualquer outro tenant volta uma linha só — e o service não a mostra.
+ *
+ * O caminho é o PEDIDO, não o município: é o pedido que carrega o carimbo do
+ * franqueado, e é isso que impede a conta de somar a venda da concorrente que
+ * aconteceu na mesma cidade.
+ */
+export async function safraPorFranqueado(cx, safra) {
+  const { rows } = await cx.query(`
+    with talhao_do_franqueado as (
+      select distinct pd.franqueado_id, t.id as talhao_id
+        from pedido pd
+        join talhao t on t.propriedade_id = pd.propriedade_id
+       where pd.franqueado_id is not null and pd.situacao <> 'cancelado'
+    )
+    select f.franqueado_id,
+           coalesce(tn.nome, 'sem nome')                          as franqueado,
+           count(distinct pl.id)::int                             as talhoes,
+           count(c.produtividade_sc_ha)::int                      as colhidos,
+           coalesce(sum(coalesce(pl.area_ha, t.area_ha))
+                    filter (where c.produtividade_sc_ha is not null), 0) as area_colhida_ha,
+           case when sum(coalesce(pl.area_ha, t.area_ha))
+                     filter (where c.produtividade_sc_ha is not null) > 0
+                then round(sum(coalesce(pl.area_ha, t.area_ha) * c.produtividade_sc_ha)
+                           filter (where c.produtividade_sc_ha is not null)
+                         / sum(coalesce(pl.area_ha, t.area_ha))
+                           filter (where c.produtividade_sc_ha is not null), 1)
+                end                                               as media_ponderada_sc_ha
+      from talhao_do_franqueado f
+      join talhao t on t.id = f.talhao_id
+      join plantio pl on pl.talhao_id = t.id and pl.safra = $1
+      left join colheita c on c.plantio_id = pl.id
+      left join tenant tn on tn.id = f.franqueado_id
+     group by f.franqueado_id, tn.nome
+     order by media_ponderada_sc_ha desc nulls last`, [safra]);
+  return rows;
+}

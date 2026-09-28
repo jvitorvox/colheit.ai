@@ -255,3 +255,29 @@ export function resultadoPorOrigem(ctx, safra) {
     };
   });
 }
+
+/**
+ * A safra aberta por franqueado — o número da franqueadora.
+ *
+ * Ela é o topo da cadeia e não opera venda nenhuma: o que ela precisa saber é
+ * qual franqueado está entregando lavoura melhor, e esse recorte não existe em
+ * nenhuma outra tela.
+ *
+ * Volta vazio para quem enxerga um franqueado só. Não é `if` de papel: é a
+ * mesma resposta para todo mundo, e quem tem uma linha só não tem comparação a
+ * fazer.
+ */
+export function safraPorFranqueado(ctx, safra) {
+  const s = textoObrigatorio(safra, 'safra', 10);
+  return comContexto(ctx, async (cx) => {
+    const linhas = await repo.safraPorFranqueado(cx, s);
+    return linhas.map((l) => ({
+      franqueadoId: l.franqueado_id,
+      franqueado: l.franqueado,
+      talhoes: l.talhoes,
+      colhidos: l.colhidos,
+      areaColhidaHa: Number(l.area_colhida_ha),
+      mediaPonderadaScHa: numeroOuNulo(l.media_ponderada_sc_ha),
+    }));
+  });
+}

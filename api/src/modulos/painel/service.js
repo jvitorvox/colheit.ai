@@ -54,7 +54,7 @@ export async function montar(ctx, { safra } = {}) {
   // Em paralelo: são leituras independentes, e o gestor abre esta tela toda
   // manhã. Em série seriam sete idas ao banco enfileiradas por nada.
   const [lista, gargalo, porCanal, venda, oportunidades, penetracao, share, fila, aValidar,
-    resultado, porOrigem] =
+    resultado, porOrigem, porFranqueado] =
     await Promise.all([
       pedidos.listar(ctx, { situacao: 'andamento' }),
       pedidos.gargalo(ctx),
@@ -67,6 +67,7 @@ export async function montar(ctx, { safra } = {}) {
       captura.relatos(ctx, { situacao: 'pendente' }),
       caderno.resultadoDaSafra(ctx, escolhida),
       caderno.resultadoPorOrigem(ctx, escolhida),
+      caderno.safraPorFranqueado(ctx, escolhida),
     ]);
 
   // Bloco vazio vira AUSÊNCIA, não uma fileira de zeros.
@@ -93,6 +94,8 @@ export async function montar(ctx, { safra } = {}) {
     funil: seTiver(oportunidades.reduce((s, e) => s + e.quantas, 0),
       resumirFunil(oportunidades)),
     resultado: resumirResultado(resultado, porOrigem),
+    // A rede só diz algo a quem enxerga mais de um franqueado: a franqueadora.
+    rede: porFranqueado.length > 1 ? porFranqueado : null,
   };
 }
 

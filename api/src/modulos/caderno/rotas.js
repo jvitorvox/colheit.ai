@@ -43,3 +43,9 @@ rotasCaderno.get('/resultado', rota(async (req, res) => {
 rotasCaderno.get('/resultado-por-origem', soEmpresa, rota(async (req, res) => {
   res.json(await servico.resultadoPorOrigem(req.ctx, req.query.safra));
 }));
+
+// A safra por franqueado. Só empresa, como as outras leituras de rede — e
+// vazia para quem enxerga um franqueado só, que é quase todo mundo.
+rotasCaderno.get('/resultado-por-franqueado', soEmpresa, rota(async (req, res) => {
+  res.json(await servico.safraPorFranqueado(req.ctx, req.query.safra));
+}));

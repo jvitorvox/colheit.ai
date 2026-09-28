@@ -962,6 +962,44 @@ como a mesma linha. A 030 abre a relação produtor↔propriedade pela mesma por
 das outras — o pedido que carimbou o território —, e não revela nada novo: o
 próprio pedido que ele lê já traz os dois lados na mesma linha.
 
+### E ao topo da cadeia: a franqueadora
+
+`franqueadora` existia só como valor do enum de tipo desde a 012 — a
+visibilidade dela nunca tinha sido construída. A 031 constrói.
+
+`rede` liga franqueado a franqueadora, com **chave primária no franqueado**: a
+exclusividade da franquia é a própria restrição de unicidade, como o território
+na 012. Um franqueado servindo duas franqueadoras é estado que o banco não
+permite existir.
+
+> **Uma franqueadora não pode saber das transações de outra.**
+>
+> Cada política dela pendura no **pedido**, que já carrega o carimbo do
+> franqueado. O alcance é "pedido cujo franqueado é meu" — nunca "tudo que
+> aconteceu no município", que pegaria a venda da concorrente na mesma cidade.
+> Há teste com duas franqueadoras e franqueados vizinhos em Mato Grosso: a rival
+> vê 367 sc e 1.100 ha, e nada dos 3.301 sc da outra rede.
+
+Tudo de leitura, como o franqueado: ela não opera venda nenhuma. E
+`pedido_item`, `nota`, `plantio` e `colheita` passam a valer para ela **sem uma
+linha a mais** — foram escritas em cima de `app.pedido_visivel` e
+`app.talhao_visivel`, que perguntam o que o chamador enxerga em vez de fixar um
+tenant.
+
+`rede` tem leitura aberta, como `territorio` e pelo mesmo motivo: a forma da
+rede não é segredo — uma loja franqueada exibe a marca na fachada. O que é
+confidencial são as transações.
+
+**A rede, por franqueado** é o cartão que só ela vê, e o recorte que não existe
+em nenhuma outra tela: qual franqueado está entregando lavoura melhor. Aparece
+quando há mais de um — não por tipo de tenant, mas porque quem enxerga um só não
+tem comparação a fazer.
+
+E ele carrega a ressalva junto, como todos os outros: *territórios diferentes,
+com solo, clima e manejo diferentes — quem está no topo pode apenas ter a melhor
+terra.*
+
+
 
 ## Caderno de campo — e o share por marca
 
@@ -975,6 +1013,7 @@ GET  /caderno/desempenho            como cada cultivar se saiu
 GET  /caderno/resultado             o fechamento da safra, ponderado pela área
                                     (?produtorId= para um produtor só)
 GET  /caderno/resultado-por-origem  nossa semente × concorrente — só empresa
+GET  /caderno/resultado-por-franqueado  a safra de cada franqueado da rede
 GET  /caderno/share                 share por marca — só empresa
 POST /caderno/plantios              registra ou corrige
 POST /caderno/plantios/:id/colheita fecha o laço
