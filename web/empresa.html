@@ -54,6 +54,14 @@ tbody tr.clicavel:hover{background:var(--papel-2)}
   align-items:center;font-size:.875rem}
 .funil .medidor{height:22px;background:var(--papel-2);border:1px solid var(--linha);
   border-radius:6px;overflow:hidden}
+/* A carteira do consultor na janela: lista longa, alvo grande, rolagem própria
+   — uma empresa com cem produtores não pode empurrar o botão Fechar para fora
+   da tela. */
+.lista-carteira{max-height:52vh;overflow-y:auto;margin:4px 0 12px}
+.preparo-item{display:flex;align-items:center;gap:11px;padding:10px 2px;
+  border-top:1px solid var(--linha);font-size:.9375rem;cursor:pointer}
+.preparo-item input{width:20px;height:20px;flex:none;accent-color:var(--marca)}
+
 .funil .medidor{position:relative}
 .funil .medidor i{display:block;height:100%;background:var(--marca-2)}
 /* A régua da região: uma marca vertical no medidor, não uma segunda barra —

@@ -968,9 +968,60 @@ O console de gestor e consultor, em `/empresa`. Mesma origem, mesmos tokens
 | **Pedidos** | lista, abre, avança, retrocede com motivo, muda crédito, lança nota |
 | **Carteira** | produtores, novo cadastro e o convite de acesso |
 | **Do campo** | o que chegou pelo WhatsApp, para o consultor validar ou descartar |
+| **Equipe** | usuários da empresa, senha e quem cada consultor atende |
 
 A regra da etapa 4 aparece aqui como ela é: o cartão da nota diz que o
 faturamento não passa sem ela, e tentar avançar devolve a mensagem da API.
+
+### A equipe, e o que ficou fora do console
+
+Até esta tela, usuário e carteira se criavam com `insert` direto no banco — todo
+seed e todo teste desta base fez assim, e passou despercebido porque o caminho
+do dado sempre existiu. **Ninguém subia um cliente sem um DBA ao lado.**
+
+| Decisão | Por quê |
+|---|---|
+| usuário nasce **sem senha** | gerar uma e mostrá-la seria pôr credencial numa tela que alguém fotografa; a linha fica âmbar até o gestor definir |
+| **desativa**, não apaga | visita, pedido e relato apontam para a pessoa — apagar o autor reescreveria a história de quem esteve na lavoura |
+| o **e-mail não muda** | é a chave de acesso; trocá-la é criar outro usuário |
+| o último **gestor ativo** não sai nem vira consultor | senão a empresa fica sem quem crie usuário, e a saída seria o psql de novo |
+| a ação da linha chama **"Quem atende"** | a aba lateral já se chama "Carteira" e é outra coisa — lá são os produtores da empresa |
+
+**"Só gestor" saiu do JavaScript e foi para o banco.** A política de `usuario`
+ganhou `with check (… and app.e_gestor())`, e `app.autorizar_consultor` — que é
+`security definer` e a política não alcança — checa por dentro. Uma rota nova que
+esquecesse de olhar o papel não abriria buraco; há teste que tenta o `insert`
+direto com uma sessão de consultor e é recusado pela RLS.
+
+`app.e_gestor()` **precisa** ser `security definer`: ela é usada na política de
+`usuario` e lê `usuario`. Sem bypassar a política, a política chamaria a si mesma
+e o Postgres recusaria por recursão. Ela não tem parâmetro — responde sobre a
+sessão atual, nunca sobre um terceiro.
+
+> **O que NÃO virou tela: criar empresa, território e rede.**
+>
+> Nenhum desses atos acontece dentro de um cliente. Viraram `npm run admin`, que
+> roda com o papel dono fora de qualquer sessão — o mesmo lugar de `migrar` e do
+> despachante de push, e sem rota que alcance.
+>
+> A alternativa seria inventar um **superadmin**: um papel acima dos tenants,
+> com autenticação própria e uma quarta casca para manter. Isso é decisão de
+> produto, não consequência técnica — e enquanto ela não for tomada, uma linha de
+> comando resolve e não abre superfície nenhuma.
+
+```bash
+npm run admin -- empresa "3 Tentos" 11111111000111 distribuidor "Marina" marina@3t.com
+npm run admin -- territorio Sorriso MT <id do franqueado>
+npm run admin -- rede <id do franqueado> <id da franqueadora>
+npm run admin -- empresas
+```
+
+A empresa e o primeiro gestor nascem na **mesma transação** — empresa sem gestor
+é empresa que ninguém abre. A senha é sorteada e impressa uma vez; pedi-la por
+argumento a deixaria no histórico do shell.
+
+Redesenhar território **não reescreve o passado**: `pedido.franqueado_id` é
+carimbo da criação, e o comando diz isso na saída.
 
 O service worker **deixa `/empresa` de fora**. É aplicação de mesa, com conexão —
 guardar a casca só serviria para servir versão velha a quem trabalha o dia

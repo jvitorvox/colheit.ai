@@ -195,3 +195,66 @@ export async function procurarTalhoes(cx, termos, frase) {
      limit 5`, [termos, frase]);
   return rows;
 }
+
+/* ------------------------------------------------------------- a equipe */
+
+export async function criarUsuario(cx, { nome, email, papel, senhaHash }) {
+  const { rows } = await cx.query(`
+    insert into usuario (tenant_id, nome, email, papel, senha_hash)
+    values (app.tenant_atual(), $1, $2, $3, $4)
+    returning id, nome, email, papel, ativo, criado_em`,
+  [nome, email, papel, senhaHash]);
+  return rows[0];
+}
+
+/**
+ * A equipe, com quantos produtores cada um atende.
+ *
+ * O gestor conta como quem "enxerga tudo": pôr um número de carteira ao lado
+ * dele daria a entender que ele vê só aquilo, e ele vê a empresa inteira.
+ */
+export async function listarUsuarios(cx) {
+  const { rows } = await cx.query(`
+    select u.id, u.nome, u.email, u.papel, u.ativo, u.criado_em,
+           u.senha_hash is not null as tem_senha,
+           case when u.papel = 'consultor'
+                then (select count(*)::int from consultor_carteira c
+                       where c.usuario_id = u.id)
+                end as produtores
+      from usuario u
+     order by u.ativo desc, u.papel, u.nome`);
+  return rows;
+}
+
+export async function alterarUsuario(cx, id, { nome, papel, ativo }) {
+  const { rows } = await cx.query(`
+    update usuario
+       set nome  = coalesce($2, nome),
+           papel = coalesce($3, papel),
+           ativo = coalesce($4, ativo)
+     where id = $1
+     returning id, nome, email, papel, ativo`,
+  [id, nome ?? null, papel ?? null, ativo ?? null]);
+  return rows[0] ?? null;
+}
+
+export async function carteiraDoConsultor(cx, usuarioId) {
+  const { rows } = await cx.query(`
+    select p.id, p.nome,
+           exists (select 1 from consultor_carteira c
+                    where c.usuario_id = $1 and c.vinculo_id = v.id) as atende
+      from produtor_vinculo v
+      join produtor p on p.id = v.produtor_id and p.fundido_em is null
+     order by p.nome`, [usuarioId]);
+  return rows;
+}
+
+export const desautorizarConsultor = (cx, usuarioId, vinculoId) =>
+  cx.query('select app.desautorizar_consultor($1, $2)', [usuarioId, vinculoId]);
+
+export async function contarGestoresAtivos(cx, exceto) {
+  const { rows } = await cx.query(
+    "select count(*)::int as n from usuario where papel = 'gestor' and ativo and id <> $1",
+    [exceto]);
+  return rows[0].n;
+}

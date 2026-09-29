@@ -118,6 +118,7 @@ const ABAS = [
   ['visitas', 'Visitas'],
   ['caderno', 'Lavoura'],
   ['campo', 'Do campo'],
+  ['equipe', 'Equipe'],
 ];
 
 function casca() {
@@ -690,6 +691,155 @@ async function agir(fn, idParaReabrir) {
   } catch (e) { alerta(e.message); }
 }
 
+/* ----------------------------------------------------------------- equipe */
+
+/**
+ * A equipe da empresa.
+ *
+ * Até esta tela, usuário se criava com `insert` direto no banco — e a carteira
+ * do consultor também. O caminho do dado sempre existiu; o que faltava era
+ * alguém conseguir usar o sistema sem um DBA ao lado.
+ *
+ * Só o gestor escreve, e quem recusa é o banco. O consultor abre a tela e vê a
+ * equipe: precisa, para saber a quem endereçar.
+ */
+async function telaEquipe(main) {
+  const equipe = await api('/cadastro/usuarios');
+  const souGestor = estado.eu?.papel === 'gestor';
+
+  const acoes = [];
+  if (souGestor) {
+    const novo = el('button', 'botao', 'Novo usuário');
+    novo.onclick = () => janelaNovoUsuario();
+    acoes.push(novo);
+  }
+  main.append(cabecalho('Equipe', `${equipe.filter((u) => u.ativo).length} ativos`, acoes));
+
+  if (!souGestor) {
+    main.append(el('div', 'faixa',
+      'Você vê a equipe. Criar e alterar usuário é do gestor.'));
+  }
+
+  main.append(tabela(
+    ['Nome', 'E-mail', 'Papel', 'Carteira', 'Situação', ''],
+    equipe.map((u) => {
+      const botoes = el('div', 'acoes');
+      if (souGestor) {
+        const senha = el('button', 'botao vazado pequeno', u.tem_senha ? 'Trocar senha' : 'Definir senha');
+        senha.onclick = (ev) => { ev.stopPropagation(); janelaSenha(u); };
+        botoes.append(senha);
+
+        if (u.papel === 'consultor') {
+          // Não "Carteira": a aba lateral já se chama assim e é outra coisa —
+          // lá são os produtores da empresa, aqui é quem este consultor atende.
+          const cart = el('button', 'botao vazado pequeno', 'Quem atende');
+          cart.onclick = (ev) => { ev.stopPropagation(); janelaCarteira(u); };
+          botoes.append(cart);
+        }
+
+        const situacao = el('button', 'botao vazado pequeno', u.ativo ? 'Desativar' : 'Reativar');
+        situacao.onclick = (ev) => {
+          ev.stopPropagation();
+          agir(() => api(`/cadastro/usuarios/${u.id}`, {
+            metodo: 'PATCH', corpo: { ativo: !u.ativo },
+          }));
+        };
+        botoes.append(situacao);
+      }
+
+      return [
+        u.nome,
+        u.email,
+        u.papel,
+        // Gestor enxerga a empresa inteira: um número de carteira ao lado dele
+        // daria a entender que ele vê só aquilo.
+        u.papel === 'gestor' ? 'tudo' : `${u.produtores ?? 0} produtor(es)`,
+        u.ativo
+          ? (u.tem_senha ? el('span', 'etiqueta boa', 'ativo') : el('span', 'etiqueta atencao', 'sem senha'))
+          : el('span', 'etiqueta', 'inativo'),
+        botoes,
+      ];
+    }),
+  ));
+
+  main.append(el('p', 'detalhe',
+    'Quem sai é desativado, não apagado: visita, pedido e relato continuam '
+    + 'apontando para a pessoa, e apagar o autor reescreveria a história de '
+    + 'quem esteve na lavoura.'));
+}
+
+function janelaNovoUsuario() {
+  janela('Novo usuário', [
+    { nome: 'nome', rotulo: 'Nome' },
+    { nome: 'email', rotulo: 'E-mail', tipo: 'email' },
+    { nome: 'papel', rotulo: 'Papel (gestor ou consultor)', valor: 'consultor' },
+  ], (v) => api('/cadastro/usuarios', {
+    metodo: 'POST', corpo: { nome: v.nome, email: v.email, papel: v.papel },
+  }));
+  // Ele nasce SEM senha, e a linha dele aparece com a etiqueta âmbar até o
+  // gestor definir uma. Encadear a janela da senha aqui não funciona — `janela`
+  // fecha e redesenha depois do callback —, e a etiqueta é um lembrete melhor
+  // que um passo obrigatório: quem cria dez usuários define as dez senhas
+  // quando quiser, e vê de relance quais faltam.
+}
+
+function janelaSenha(u) {
+  janela(`Senha de ${u.nome}`, [
+    { nome: 'senha', rotulo: 'Nova senha (mínimo 8 caracteres)', tipo: 'password' },
+  ], (v) => api(`/auth/usuarios/${u.id}/senha`, {
+    metodo: 'POST', corpo: { senha: v.senha },
+  }), 'Definir');
+}
+
+/**
+ * A carteira de um consultor: quem ele atende.
+ *
+ * Todos os produtores da empresa numa lista, com caixa marcada em quem já é
+ * dele. É o gesto que a política espera — `consultor_carteira` é autorização
+ * explícita, e não um filtro que se deduz de outra coisa.
+ */
+async function janelaCarteira(u) {
+  const lista = await api(`/cadastro/usuarios/${u.id}/carteira`);
+  const d = $('#janela');
+  d.replaceChildren();
+  d.append(el('h3', null, `Quem ${u.nome} atende`));
+
+  if (lista.length === 0) {
+    d.append(el('p', 'vazio', 'Nenhum produtor cadastrado ainda.'));
+  }
+
+  const caixa = el('div', 'lista-carteira');
+  lista.forEach((p) => {
+    const l = el('label', 'preparo-item');
+    const c = el('input');
+    c.type = 'checkbox';
+    c.checked = p.atende;
+    c.onchange = async () => {
+      c.disabled = true;
+      try {
+        await api('/cadastro/carteira', {
+          metodo: c.checked ? 'POST' : 'DELETE',
+          corpo: { usuarioId: u.id, produtorId: p.id },
+        });
+      } catch (e) {
+        c.checked = !c.checked;   // não fingir que gravou
+        alerta(e.message);
+      }
+      c.disabled = false;
+    };
+    l.append(c, el('span', null, p.nome));
+    caixa.append(l);
+  });
+  d.append(caixa);
+
+  const fim = el('div', 'fim');
+  const fechar = el('button', 'botao', 'Fechar');
+  fechar.onclick = () => { d.close(); desenhar(); };
+  fim.append(fechar);
+  d.append(fim);
+  d.showModal();
+}
+
 /* --------------------------------------------------------------- carteira */
 
 async function telaCarteira(main) {
@@ -946,6 +1096,7 @@ async function desenhar() {
     else if (estado.aba === 'visitas') await telaVisitas(main);
     else if (estado.aba === 'caderno') await telaCaderno(main);
     else if (estado.aba === 'campo') await telaCampo(main);
+    else if (estado.aba === 'equipe') await telaEquipe(main);
     else await telaPainel(main);
   } catch (e) {
     main.append(el('p', 'vazio', e.message));

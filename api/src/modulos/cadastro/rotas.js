@@ -72,3 +72,27 @@ rotasCadastro.get('/propriedades/:id/talhoes', rota(async (req, res) => {
 rotasCadastro.post('/carteira', rota(async (req, res) => {
   res.status(201).json(await servico.autorizarConsultor(req.ctx, req.body ?? {}));
 }));
+
+// Tirar da carteira é o contrário de pôr, e não um verbo novo: mesma rota,
+// outro método.
+rotasCadastro.delete('/carteira', rota(async (req, res) => {
+  res.json(await servico.desautorizarConsultor(req.ctx, req.body ?? {}));
+}));
+
+/* ------------------------------------------------------------- a equipe */
+
+rotasCadastro.get('/usuarios', rota(async (req, res) => {
+  res.json(await servico.listarUsuarios(req.ctx));
+}));
+
+rotasCadastro.post('/usuarios', rota(async (req, res) => {
+  res.status(201).json(await servico.criarUsuario(req.ctx, req.body ?? {}));
+}));
+
+rotasCadastro.patch('/usuarios/:id', rota(async (req, res) => {
+  res.json(await servico.alterarUsuario(req.ctx, req.params.id, req.body ?? {}));
+}));
+
+rotasCadastro.get('/usuarios/:id/carteira', rota(async (req, res) => {
+  res.json(await servico.carteiraDoConsultor(req.ctx, req.params.id));
+}));

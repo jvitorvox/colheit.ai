@@ -247,3 +247,89 @@ export function procurarTalhaoNoTexto(ctx, texto) {
     return { ambiguos: candidatos };
   });
 }
+
+/* ------------------------------------------------------------- a equipe */
+
+// Papéis de USUÁRIO. O `PAPEIS` do topo é outro: posse da terra.
+const PAPEIS_DE_USUARIO = ['gestor', 'consultor'];
+
+/**
+ * Cria um usuário da empresa.
+ *
+ * Nasce SEM senha. Quem define é o gestor, num segundo ato — o mesmo caminho
+ * que `POST /auth/usuarios/:id/senha` já usava. Gerar senha aqui e mostrá-la na
+ * tela seria pôr credencial em tela que alguém fotografa.
+ *
+ * Quem recusa um não-gestor é a política do banco; a checagem aqui existe para
+ * a mensagem ser clara em vez de um erro de permissão cru.
+ */
+export function criarUsuario(ctx, corpo = {}) {
+  if (ctx.papel !== 'gestor') throw new ErroDeUso('só gestor cria usuário');
+  const u = {
+    nome: textoObrigatorio(corpo.nome, 'nome', 120),
+    email: textoObrigatorio(corpo.email, 'email', 160).trim().toLowerCase(),
+    papel: umDe(corpo.papel, PAPEIS_DE_USUARIO, 'papel', 'consultor'),
+    senhaHash: null,
+  };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u.email)) {
+    throw new ErroDeUso('e-mail inválido', 'email');
+  }
+  return comContexto(ctx, (cx) => repo.criarUsuario(cx, u));
+}
+
+export const listarUsuarios = (ctx) => comContexto(ctx, (cx) => repo.listarUsuarios(cx));
+
+/**
+ * Muda nome, papel ou situação.
+ *
+ * Desativar é o que se faz quando alguém sai — e não apagar: visita, pedido e
+ * relato continuam apontando para ele, e apagar o autor reescreveria a
+ * história de quem esteve na lavoura.
+ *
+ * O último gestor ativo não se desativa nem vira consultor. Sem isso a empresa
+ * fica sem ninguém que possa criar usuário, e a saída seria o psql de novo —
+ * exatamente o que estas telas vieram resolver.
+ */
+export function alterarUsuario(ctx, id, corpo = {}) {
+  if (ctx.papel !== 'gestor') throw new ErroDeUso('só gestor altera usuário');
+  uuidValido(id, 'id');
+  const mudanca = {
+    nome: corpo.nome === undefined ? null : textoObrigatorio(corpo.nome, 'nome', 120),
+    papel: corpo.papel === undefined ? null : umDe(corpo.papel, PAPEIS_DE_USUARIO, 'papel'),
+    ativo: corpo.ativo === undefined ? null : Boolean(corpo.ativo),
+  };
+
+  return comContexto(ctx, async (cx) => {
+    const antes = (await cx.query(
+      'select id, papel, ativo from usuario where id = $1', [id])).rows[0];
+    if (!antes) throw new NaoEncontrado('usuário');
+
+    const deixaDeSerGestor = antes.papel === 'gestor'
+      && ((mudanca.papel !== null && mudanca.papel !== 'gestor') || mudanca.ativo === false);
+    if (deixaDeSerGestor && await repo.contarGestoresAtivos(cx, id) === 0) {
+      throw new ErroDeUso('a empresa ficaria sem gestor', 'papel');
+    }
+
+    const depois = await repo.alterarUsuario(cx, id, mudanca);
+    if (!depois) throw new NaoEncontrado('usuário');
+    return depois;
+  });
+}
+
+/** A carteira de um consultor: todos os produtores, marcando quem ele atende. */
+export function carteiraDoConsultor(ctx, usuarioId) {
+  uuidValido(usuarioId, 'usuarioId');
+  return comContexto(ctx, (cx) => repo.carteiraDoConsultor(cx, usuarioId));
+}
+
+/** Tira um produtor da carteira. O histórico do que ele fez fica. */
+export function desautorizarConsultor(ctx, corpo = {}) {
+  const usuarioId = uuidValido(corpo.usuarioId, 'usuarioId');
+  const produtorId = uuidValido(corpo.produtorId, 'produtorId');
+  return comContexto(ctx, async (cx) => {
+    const vinculoId = await repo.vinculoDoProdutor(cx, produtorId);
+    if (!vinculoId) throw new NaoEncontrado('produtor');
+    await repo.desautorizarConsultor(cx, usuarioId, vinculoId);
+    return { autorizado: false };
+  });
+}
