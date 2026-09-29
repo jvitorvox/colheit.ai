@@ -91,8 +91,13 @@ function telaEntrar() {
   esqueci.type = 'button';
   esqueci.onclick = () => janelaEsqueci(email.value);
 
+  const criar = el('button', 'elo', 'Criar a conta da minha empresa');
+  criar.type = 'button';
+  criar.onclick = () => janelaCriarConta();
+
   form.append(el('label', 'rotulo', 'E-mail'), email,
-    el('div', 'campo'), el('label', 'rotulo', 'Senha'), senha, botao, erro, esqueci);
+    el('div', 'campo'), el('label', 'rotulo', 'Senha'), senha, botao, erro,
+    esqueci, criar);
   form.onsubmit = async (ev) => {
     ev.preventDefault();
     botao.disabled = true; erro.textContent = '';
@@ -134,6 +139,58 @@ function janelaEsqueci(email) {
 }
 
 /**
+ * Criar a conta da empresa.
+ *
+ * O formulário sai e nada é criado: o que nasce é um pedido à espera do
+ * e-mail. A resposta é a mesma para empresa nova, CNPJ que já é cliente e
+ * e-mail que já tem conta — quem conta o que aconteceu é a mensagem, e ela só
+ * chega a quem controla o endereço digitado.
+ *
+ * Por isso esta tela não diz "pronto, sua conta foi criada": ela não sabe, e
+ * não deve saber.
+ */
+function janelaCriarConta() {
+  janela('Criar a conta da minha empresa', [
+    { nome: 'nome', rotulo: 'Nome da empresa' },
+    { nome: 'documento', rotulo: 'CNPJ', dica: 'só números' },
+    {
+      nome: 'tipo',
+      rotulo: 'O que a empresa é',
+      opcoes: [['revenda', 'Revenda'], ['distribuidor', 'Distribuidor']],
+    },
+    { nome: 'gestor', rotulo: 'Seu nome' },
+    { nome: 'email', rotulo: 'Seu e-mail', tipo: 'email' },
+  ], async (v) => {
+    const r = await api('/conta/cadastro', { metodo: 'POST', corpo: v });
+    setTimeout(() => alerta(r.enviado, 'Cadastro'), 0);
+  }, 'Enviar');
+}
+
+/**
+ * A confirmação do cadastro, aberta pelo link do e-mail.
+ *
+ * É aqui que a empresa passa a existir — e emenda direto na escolha da senha:
+ * quem acabou de confirmar o e-mail não deve ter de clicar num segundo link
+ * para conseguir entrar.
+ */
+async function confirmarConta(token) {
+  document.body.classList.add('entrando');
+  const c = el('div', 'entrada cartao');
+  c.append(el('h1', 'marca', 'colheit.ai'), el('p', 'sub', 'Confirmando…'));
+  $('#raiz').replaceChildren(c);
+
+  try {
+    const r = await api('/conta/confirmar', { metodo: 'POST', corpo: { token } });
+    telaNovaSenha(r.token, `${r.empresa} está criada. Escolha sua senha.`);
+  } catch (e) {
+    c.replaceChildren(el('h1', 'marca', 'colheit.ai'), el('p', 'erro', e.message));
+    const voltar = el('button', 'botao', 'Voltar para a entrada');
+    voltar.onclick = () => desenhar();
+    c.append(voltar);
+  }
+}
+
+/**
  * A tela de escolher a senha, aberta por um link.
  *
  * O bilhete viaja no FRAGMENTO da URL, depois do `#`, e não na busca: o que
@@ -144,11 +201,11 @@ function janelaEsqueci(email) {
  * Funciona com sessão ou sem — quem chegou por este link normalmente não
  * consegue entrar, que é o motivo de ele existir.
  */
-function telaNovaSenha(token) {
+function telaNovaSenha(token, subtitulo = 'Escolha uma senha') {
   document.body.classList.add('entrando');
   const c = el('div', 'entrada cartao');
   c.append(el('h1', 'marca', 'colheit.ai'));
-  c.append(el('p', 'sub', 'Escolha uma senha'));
+  c.append(el('p', 'sub', subtitulo));
 
   const form = el('form');
   const senha = el('input');
@@ -1086,8 +1143,18 @@ function janela(titulo, campos, aoConfirmar, rotuloBotao = 'Confirmar') {
   const entradas = {};
   campos.forEach((c) => {
     form.append(el('label', 'rotulo', c.rotulo));
-    const i = el(c.tipo === 'textarea' ? 'textarea' : 'input');
-    if (c.tipo && c.tipo !== 'textarea') i.type = c.tipo;
+    // Com `opcoes`, vira lista. Num formulário público não dá para deixar um
+    // campo de texto livre valendo por uma lista fechada: quem digitasse
+    // "Revenda " levaria um 400 no primeiro contato com o produto.
+    const i = el(c.opcoes ? 'select' : (c.tipo === 'textarea' ? 'textarea' : 'input'));
+    if (c.opcoes) {
+      c.opcoes.forEach(([valor, rotulo]) => {
+        const o = el('option', null, rotulo);
+        o.value = valor;
+        i.append(o);
+      });
+    }
+    if (!c.opcoes && c.tipo && c.tipo !== 'textarea') i.type = c.tipo;
     // type=number assume step=1 e recusa decimal em silêncio: o formulário
     // simplesmente não envia. Preço, royalties e estande têm casas.
     if (c.tipo === 'number') i.step = 'any';
@@ -1240,10 +1307,17 @@ async function desenhar() {
  * captura de tela da barra não leva a senha de ninguém junto.
  */
 function abrirBilheteDaUrl() {
-  const bilhete = new URLSearchParams(location.hash.slice(1)).get('senha');
-  if (!bilhete) return false;
+  const url = new URLSearchParams(location.hash.slice(1));
+  const senha = url.get('senha');
+  const conta = url.get('conta');
+  if (!senha && !conta) return false;
+
   history.replaceState(null, '', location.pathname);
-  telaNovaSenha(bilhete);
+  // Trocar o fragmento não recarrega nada, então uma janela aberta continuaria
+  // por cima da tela nova — e é o caso comum: a pessoa acabou de pedir o
+  // cadastro e clicou no link com o aviso ainda aberto.
+  $('#janela').close();
+  if (conta) confirmarConta(conta); else telaNovaSenha(senha);
   return true;
 }
 

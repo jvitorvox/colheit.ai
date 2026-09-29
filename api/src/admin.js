@@ -148,7 +148,7 @@ async function rede([franqueadoId, franqueadoraId]) {
 /** O que existe hoje, para achar os identificadores sem abrir o psql. */
 async function empresas() {
   const { rows } = await dono.query(`
-    select t.id, t.nome, t.tipo, t.documento,
+    select t.id, t.nome, t.tipo, t.documento, t.origem,
            (select count(*)::int from usuario u where u.tenant_id = t.id and u.ativo) as usuarios,
            (select count(*)::int from territorio te where te.franqueado_id = t.id) as municipios
       from tenant t order by t.tipo, t.nome`);
@@ -156,7 +156,10 @@ async function empresas() {
   for (const r of rows) {
     console.log(`${r.id}  ${r.tipo.padEnd(13)} ${r.nome}`
       + `  ·  ${r.usuarios} usuário(s)`
-      + (r.municipios ? `  ·  ${r.municipios} município(s)` : ''));
+      + (r.municipios ? `  ·  ${r.municipios} município(s)` : '')
+      // Quem nasceu pela tela vem marcado: é o primeiro dado que alguém vai
+      // querer olhar quando ligarem dizendo "esse CNPJ não é dessa gente".
+      + (r.origem === 'autoatendimento' ? '  ·  pela tela' : ''));
   }
 }
 

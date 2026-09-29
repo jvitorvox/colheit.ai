@@ -1058,6 +1058,12 @@ SMTP_SENHA=
 SMTP_DE=colheit.ai <nao-responda@exemplo.com>
 ```
 
+`SMTP_HOST=registro` imprime a mensagem no log em vez de mandar. **É de
+desenvolvimento**, e serve para dar para ver o autoatendimento e a recuperação
+funcionando antes de existir um servidor de e-mail — o link sai em texto puro
+num log que costuma ser coletado e lido por quem não é dono da conta, e a subida
+avisa isso em voz alta.
+
 **O gestor deixou de definir a senha de alguém.** A rota
 `POST /auth/usuarios/:id/senha` saiu, e `app.definir_senha` perdeu o `execute`
 do papel de aplicação. Senha que duas pessoas conhecem não é senha: quem
@@ -1097,6 +1103,70 @@ esperar por algo que não vem. O que ela ouve é por onde ir — o gestor.
 > 12 h; conferir a cada requisição se a senha mudou depois dele significa uma
 > leitura no banco no caminho quente, que é decisão de arquitetura própria. Para
 > quem esqueceu a senha isso não muda nada — para quem foi invadido, muda.
+
+### Autoatendimento de cadastro — a empresa abrindo a própria conta
+
+Era o último ato que ainda exigia alguém na máquina do servidor. `POST
+/conta/cadastro` é a **única rota pública da API** — a única que alguém alcança
+sem ter conta.
+
+**Nada nasce no envio do formulário.** O que nasce é um pedido à espera do
+e-mail; a empresa só existe quando alguém abre o link. Não é cerimônia: `tenant.
+documento` é único, então criar no envio deixaria qualquer um plantar o CNPJ de
+uma empresa de verdade e **trancar a porta dela para sempre**, sem precisar
+receber e-mail nenhum, sem precisar de nada além de um POST.
+
+**Uma resposta, três desfechos.** A tela responde exatamente igual sempre; quem
+conta o que aconteceu é o e-mail, que só chega a quem controla o endereço
+digitado:
+
+| Desfecho | O e-mail diz |
+|---|---|
+| `nova` | o link de confirmação, 48 h, uma vez só |
+| `empresa_existe` | "esse CNPJ já tem conta; peça acesso a quem administra" — sem link, sem nomear ninguém |
+| `email_existe` | "você já tem conta; entre, ou use 'Esqueci minha senha'" |
+
+Dizer isso **na tela** entregaria, a quem for tentando um CNPJ de cada vez, a
+lista de quem é cliente da plataforma. O aviso não leva link nem nome porque
+saber que a empresa já é cliente basta para procurar quem administra — um nome
+a mais seria um nome entregue a quem digitou um CNPJ.
+
+A confirmação cria empresa, primeiro gestor e o bilhete de senha **na mesma
+transação**, e emenda direto na escolha da senha: quem acabou de confirmar o
+e-mail não deve ter de clicar num segundo link para entrar. O gestor nasce sem
+senha, como todo usuário desta base.
+
+**Só `revenda` e `distribuidor` se cadastram sozinhos.** Franqueadora,
+franqueado e indústria existem dentro de uma rede que alguém precisa ligar com
+`admin -- rede` ou `admin -- territorio` de qualquer jeito: são conversa, não
+formulário. E vale dizer o que *não* depende disso — `tenant.tipo` **não manda
+em visibilidade nenhuma**. Quem enxerga a rede é a tabela `rede`, quem enxerga o
+território é a `territorio`, e só o papel dono escreve nas duas. Há teste de que
+uma franqueadora sem rede não enxerga rede nenhuma.
+
+O que segura abuso, em ordem de quanto pega: o **dígito verificador do CNPJ**
+(derruba robô que sorteia número), **um pedido por minuto por endereço**, o
+prazo de 48 h, e a confirmação por e-mail — que é o que separa "sabe fazer um
+POST" de "controla uma caixa de entrada".
+
+O freio mora em `cadastro_tentativa`, uma tabela própria, e não numa contagem
+de pendências. A diferença não é arrumação: dos três desfechos só um cria
+pendência, e **os três mandam e-mail** — para o endereço que quem preenche o
+formulário escolheu. Um freio que contasse só pendência deixaria qualquer um
+despejar avisos de "essa empresa já tem conta" na caixa de outra pessoa, sem
+limite nenhum. O que se mede é o pedido, dê ele no que der.
+
+> **O limite que sobra, e não tem conserto bonito.** Quem confirmar primeiro
+> fica com o CNPJ. Alguém de má-fé que controle um e-mail pode tomar o CNPJ de
+> um concorrente e obrigar a empresa de verdade a ligar para o suporte. Exigir
+> e-mail de domínio próprio resolveria — e barraria metade das revendas do
+> interior, que usam gmail. A saída é operacional: `npm run admin -- empresas`
+> marca **"pela tela"** quem nasceu assim, que é o primeiro dado a olhar quando
+> essa ligação chegar.
+
+Nada disso funciona sem correio: sem como confirmar, o autoatendimento
+simplesmente não existe naquela instalação, e a tela diz isso em vez de aceitar
+um formulário que não leva a lugar nenhum.
 
 ## Registro de visita — e a H1 medida
 

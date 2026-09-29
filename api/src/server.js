@@ -6,6 +6,7 @@ import { identificar, soEmpresa } from './http/identificar.js';
 import { tratarErro } from './http/erros.js';
 import { rotasAuth } from './modulos/auth/rotas.js';
 import { rotasCadastro } from './modulos/cadastro/rotas.js';
+import { rotasConta } from './modulos/conta/rotas.js';
 import { rotasPedidos } from './modulos/pedidos/rotas.js';
 import { rotasPush } from './modulos/push/rotas.js';
 import { rotasCaptura } from './modulos/captura/rotas.js';
@@ -48,6 +49,9 @@ export function criarApp() {
   });
 
   api.use("/auth", rotasAuth);
+
+  // Conta é a única área pública da API: quem chega aqui ainda não é cliente.
+  api.use('/conta', rotasConta);
 
   // Cadastro é área da empresa: a sessão do portal não entra aqui.
   api.use('/cadastro', identificar, rotasCadastro);

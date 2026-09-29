@@ -52,11 +52,11 @@ export async function entrar(req, email, senha = SENHA) {
 /**
  * Estado limpo para um arquivo de teste de API.
  *
- * tentativa_login e codigo_acesso não pendem de tenant, então não caem no
- * cascade — e sem limpá-los o freio de força bruta de um arquivo trava o
- * login do arquivo seguinte, que roda no mesmo banco.
+ * tentativa_login, codigo_acesso e cadastro_tentativa não pendem de tenant,
+ * então não caem no cascade — e sem limpá-los o freio de um arquivo trava o
+ * arquivo seguinte, que roda no mesmo banco.
  */
 export async function limparBase() {
   await dono.query('truncate tenant, produtor, propriedade cascade');
-  await dono.query('truncate tentativa_login, codigo_acesso');
+  await dono.query('truncate tentativa_login, codigo_acesso, cadastro_tentativa');
 }
