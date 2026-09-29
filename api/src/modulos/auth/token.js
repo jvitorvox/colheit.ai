@@ -6,8 +6,11 @@ import jwt from 'jsonwebtoken';
 //              para ele, que trabalha sentado e com senha à mão.
 //   produtor → 30 dias. Ele é a ponta de que a adoção depende, e pedir login
 //              de novo a cada semana é o tipo de atrito que esvazia o portal.
+//   plataforma → 4 h. Ela desliga o sistema de uma empresa inteira com um
+//              clique; é a sessão que menos pode ficar esquecida aberta.
 const HORAS_USUARIO = '12h';
 const DIAS_PRODUTOR = '30d';
+const HORAS_PLATAFORMA = '4h';
 
 function segredo() {
   const s = process.env.JWT_SEGREDO;
@@ -29,6 +32,11 @@ export function tokenDeProdutor({ id }) {
     { ...COMUM, subject: id, expiresIn: DIAS_PRODUTOR });
 }
 
+export function tokenDePlataforma({ id }) {
+  return jwt.sign({ tipo: 'plataforma' }, segredo(),
+    { ...COMUM, subject: id, expiresIn: HORAS_PLATAFORMA });
+}
+
 /**
  * Verifica e devolve o contexto da requisição.
  *
@@ -45,6 +53,13 @@ export function lerToken(bruto) {
     }
     if (p.tipo === 'produtor') {
       return { produtor: p.sub };
+    }
+    // Sem tenant, e é o ponto: `soEmpresa` recusa esta sessão, e nas rotas que
+    // não passam por ele o contexto vai vazio para o banco — onde nenhuma
+    // política casa. O moderador não deixa de ver dado de negócio porque
+    // alguém lembrou de conferir; ele não vê porque não há por onde.
+    if (p.tipo === 'plataforma') {
+      return { plataforma: p.sub };
     }
     return null;
   } catch {

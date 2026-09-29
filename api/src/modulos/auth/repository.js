@@ -63,3 +63,8 @@ export async function consumirRecuperacao(cx, hash, senhaHash) {
     'select app.consumir_recuperacao($1, $2) as id', [hash, senhaHash]);
   return rows[0].id ?? null;
 }
+
+export async function credencialDePlataforma(cx, email) {
+  const { rows } = await cx.query('select * from app.credencial_plataforma($1)', [email]);
+  return rows[0] ?? null;
+}

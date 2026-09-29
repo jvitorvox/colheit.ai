@@ -30,3 +30,15 @@ export function soProdutor(req, _res, next) {
   if (!req.ctx?.produtor) return next(new ErroDeUso('esta rota é do portal do produtor'));
   next();
 }
+
+/**
+ * Fecha a rota para quem não é da plataforma.
+ *
+ * É o espelho de `soEmpresa`, e vale nos dois sentidos: nenhuma sessão de
+ * empresa ou de portal entra aqui, e a de plataforma não entra em lugar nenhum
+ * que peça tenant.
+ */
+export function soPlataforma(req, _res, next) {
+  if (!req.ctx?.plataforma) return next(new ErroDeUso('esta rota é da plataforma'));
+  next();
+}

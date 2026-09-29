@@ -15,6 +15,7 @@
 //   docker compose exec -w /app/api api npm run admin -- territorio Sorriso MT <franqueado>
 //   docker compose exec -w /app/api api npm run admin -- rede <franqueado> <franqueadora>
 //   docker compose exec -w /app/api api npm run admin -- senha ana@3t.com
+//   docker compose exec -w /app/api api npm run admin -- plataforma "Joao" joao@colheit.ai
 //   docker compose exec -w /app/api api npm run admin -- empresas
 import { dono } from './db.js';
 import { gerarToken, hashToken } from './modulos/auth/senha.js';
@@ -62,6 +63,41 @@ async function empresa([nome, documento, tipo, gestor, email]) {
 }
 
 /**
+ * A conta que modera cadastro.
+ *
+ * Nasce só por aqui, e não por tela nenhuma: é a única conta da plataforma que
+ * fica acima de todos os clientes, e criar mais uma dessas é ato de quem tem a
+ * máquina, não de quem tem uma sessão aberta.
+ *
+ * Ela vê cadastro — nome, CNPJ, quem pediu, quando — e não vê pedido, produtor,
+ * visita nem caderno de ninguém. Isso não é promessa desta função: a sessão de
+ * plataforma não põe tenant no contexto, e sem tenant nenhuma política casa.
+ */
+async function plataforma([nome, email]) {
+  if (!nome || !email) throw new Error('uso: plataforma <nome> <e-mail>');
+  const chave = String(email).trim().toLowerCase();
+
+  const cx = await dono.connect();
+  try {
+    await cx.query('begin');
+    const { rows: [p] } = await cx.query(
+      'insert into plataforma_usuario (nome, email) values ($1,$2) returning id',
+      [nome, chave]);
+    const link = await abrirBilhete(cx, p.id, 'plataforma_id', '/plataforma');
+    await cx.query('commit');
+
+    console.log(`plataforma  ${p.id}  ${chave}`);
+    console.log(`\nEntregue este link — ele vale 24 h e serve uma vez:\n${link}`);
+  } catch (erro) {
+    await cx.query('rollback');
+    if (erro.code === '23505') throw new Error(`já existe conta de plataforma com ${chave}`);
+    throw erro;
+  } finally {
+    cx.release();
+  }
+}
+
+/**
  * O fundo da escada da recuperação de senha.
  *
  * Um consultor que esquece a senha pede ao gestor. O gestor que esquece pede a
@@ -92,25 +128,50 @@ async function senha([email]) {
 }
 
 /**
+ * O mesmo fundo de escada, para quem modera.
+ *
+ * Aqui não existe "outro gestor" a quem pedir: a conta de plataforma não tem
+ * empresa, e a tela dela não abre acesso para ninguém. Quem esquece essa senha
+ * depende da máquina, e é assim que tem de ser.
+ */
+async function senhaPlataforma([email]) {
+  if (!email) throw new Error('uso: senha-plataforma <e-mail>');
+  const chave = String(email).trim().toLowerCase();
+  const { rows } = await dono.query(
+    'select id, nome, ativo from plataforma_usuario where lower(email) = $1', [chave]);
+  if (rows.length === 0) throw new Error(`nenhuma conta de plataforma com o e-mail ${chave}`);
+
+  const [p] = rows;
+  if (!p.ativo) throw new Error(`${p.nome} está inativo`);
+
+  console.log(`${p.nome} · plataforma`);
+  console.log('\nEntregue este link — ele vale 24 h e serve uma vez:\n'
+    + `${await abrirBilhete(dono, p.id, 'plataforma_id', '/plataforma')}`);
+}
+
+/**
  * O bilhete de senha, do jeito que a API o guarda: só o hash fica.
  *
  * Sem APP_URL o comando imprime o caminho em vez de um endereço inventado —
  * link com o servidor errado é link que não abre, e pior, um que alguém tenta.
  */
-async function abrirBilhete(cx, usuarioId) {
+async function abrirBilhete(cx, id, coluna = 'usuario_id', casca = '/empresa') {
   const token = gerarToken();
   await cx.query(`
     update recuperacao_senha set usado_em = now()
-     where usuario_id = $1 and usado_em is null`, [usuarioId]);
+     where ${coluna} = $1 and usado_em is null`, [id]);
   await cx.query(`
-    insert into recuperacao_senha (usuario_id, token_hash, origem, expira_em)
+    insert into recuperacao_senha (${coluna}, token_hash, origem, expira_em)
     values ($1, $2, 'admin', now() + interval '24 hours')`,
-  [usuarioId, hashToken(token)]);
+  [id, hashToken(token)]);
 
+  // A casca muda com a identidade: o gestor escolhe a senha em /empresa, quem
+  // modera escolhe em /plataforma. Mandar um para a porta do outro daria um
+  // link que funciona e uma tela de entrada onde ele não consegue entrar.
   const base = String(process.env.APP_URL ?? '').replace(/\/+$/, '');
   return base
-    ? `${base}/empresa#senha=${token}`
-    : `/empresa#senha=${token}\n(cole depois do endereço da instalação; defina APP_URL para sair pronto)`;
+    ? `${base}${casca}#senha=${token}`
+    : `${casca}#senha=${token}\n(cole depois do endereço da instalação; defina APP_URL para sair pronto)`;
 }
 
 /** Um município, um franqueado. A exclusividade é a chave primária. */
@@ -171,7 +232,10 @@ async function exigirTipo(id, tipo) {
   }
 }
 
-const COMANDOS = { empresa, territorio, rede, senha, empresas };
+const COMANDOS = {
+  empresa, territorio, rede, senha, plataforma, empresas,
+  'senha-plataforma': senhaPlataforma,
+};
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [comando, ...resto] = process.argv.slice(2);
@@ -185,4 +249,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .catch((erro) => { console.error(erro.message); process.exit(1); });
 }
 
-export { empresa, territorio, rede, senha, empresas };
+export { empresa, territorio, rede, senha, plataforma, senhaPlataforma, empresas };

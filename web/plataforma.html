@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>colheit.ai · plataforma</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/icone-192.png">
+<link rel="stylesheet" href="/base.css">
+<style>
+/* A quarta casca, e a menor de todas de propósito: uma fila e três botões.
+   Ela não tem barra lateral porque não tem para onde navegar — quem modera
+   cadastro faz uma coisa só, e o dia em que fizer duas é o dia de discutir a
+   segunda, não de já ter deixado o menu pronto. */
+#raiz{max-width:980px;margin:0 auto;padding:22px 20px 60px}
+.topo{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.topo h2{font-size:1.4rem}
+.topo .quem{margin-left:auto;font-size:.8125rem;color:var(--tinta-3)}
+/* A faixa do alcance fica no alto da tela, e não numa página de ajuda: quem
+   abre isto precisa saber, antes de clicar, o que esta conta NÃO vê. */
+.alcance{font-size:.8125rem;color:var(--tinta-3);border-left:3px solid var(--linha-forte);
+  padding:6px 0 6px 12px;margin:14px 0 22px}
+.alcance b{color:var(--tinta-2);font-weight:600}
+
+.grupo{margin-bottom:30px}
+.grupo>h3{font-size:.9375rem;margin-bottom:4px}
+.grupo>p.sub{margin-bottom:12px}
+
+.ficha{background:var(--papel);border:1px solid var(--linha);border-radius:14px;
+  padding:14px 16px;margin-bottom:10px;box-shadow:var(--sombra)}
+.ficha.pendente{border-left:3px solid var(--sol)}
+.ficha .linha1{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ficha .nome{font-weight:600}
+.ficha .cnpj{font-variant-numeric:tabular-nums;color:var(--tinta-3);font-size:.875rem}
+.ficha .quem{font-size:.875rem;color:var(--tinta-2);margin-top:4px}
+.ficha .nota{font-size:.8125rem;color:var(--tinta-2);margin-top:8px;
+  background:var(--papel-2);border-radius:8px;padding:8px 10px}
+.ficha .acoes{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+.entrada{max-width:380px;margin:14vh auto;text-align:center}
+.entrada .marca{font-size:1.75rem;color:var(--marca)}
+.entrada .sub{margin:8px 0 22px}
+.entrada form{text-align:left}
+.entrada .botao{width:100%;margin-top:14px;padding:13px;font-size:1rem}
+
+dialog{border:1px solid var(--linha);border-radius:16px;background:var(--papel);
+  color:var(--tinta);padding:20px 22px;max-width:440px;width:92vw;box-shadow:var(--sombra)}
+dialog::backdrop{background:rgba(18,26,16,.45)}
+dialog h3{margin-bottom:12px}
+/* Sem isto o rótulo "Motivo" encosta no parágrafo que explica a recusa, e os
+   dois viram um bloco só de texto. */
+dialog .sub{margin-bottom:14px}
+dialog .fim{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+dialog textarea{min-height:88px}
+</style>
+</head>
+<body>
+<div id="raiz"></div>
+<dialog id="janela"></dialog>
+<script src="/plataforma.js"></script>
+</body>
+</html>

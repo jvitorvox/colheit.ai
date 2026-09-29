@@ -29,6 +29,11 @@ rotasAuth.post('/produtor/entrar', rota(async (req, res) => {
   res.json(await servico.entrarComoProdutor(req.body ?? {}));
 }));
 
+// Porta própria, e não um campo a mais em /auth/login: ver o service.
+rotasAuth.post('/plataforma/entrar', rota(async (req, res) => {
+  res.json(await servico.entrarComoPlataforma(req.body ?? {}));
+}));
+
 /**
  * Esqueci minha senha.
  *

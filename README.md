@@ -753,7 +753,9 @@ subiu.
 ## O app do consultor — e a H1 no bolso
 
 `/consultor`, instalável pelo `manifest-consultor.json`. Terceiro front-end da
-mesma origem, e o único que escreve sem conexão.
+mesma origem — depois veio um quarto, `/plataforma`, que é só a
+[moderação de cadastro](#moderação-de-cadastro--e-o-superadmin-de-menor-alcance-possível) —
+e o único que escreve sem conexão.
 
 Duas coisas o definem, e as duas vêm da H1: registrar uma visita tem de caber em
 menos de 60 segundos, e tem de funcionar sem sinal. Se qualquer uma das duas
@@ -1160,13 +1162,80 @@ limite nenhum. O que se mede é o pedido, dê ele no que der.
 > fica com o CNPJ. Alguém de má-fé que controle um e-mail pode tomar o CNPJ de
 > um concorrente e obrigar a empresa de verdade a ligar para o suporte. Exigir
 > e-mail de domínio próprio resolveria — e barraria metade das revendas do
-> interior, que usam gmail. A saída é operacional: `npm run admin -- empresas`
-> marca **"pela tela"** quem nasceu assim, que é o primeiro dado a olhar quando
-> essa ligação chegar.
+> interior, que usam gmail. Quem atende essa ligação agora tem ferramenta: a
+> [moderação](#moderação-de-cadastro--e-o-superadmin-de-menor-alcance-possível).
 
 Nada disso funciona sem correio: sem como confirmar, o autoatendimento
 simplesmente não existe naquela instalação, e a tela diz isso em vez de aceitar
 um formulário que não leva a lugar nenhum.
+
+### Moderação de cadastro — e o superadmin de menor alcance possível
+
+Aqui entra o **superadmin que eu vinha adiando de propósito** desde as telas de
+administração. Ele existia como decisão em aberto: um papel acima dos tenants,
+com autenticação própria e uma quarta casca para manter. Duas escolhas foram
+feitas ao criá-lo, e elas são o assunto inteiro desta parte.
+
+**Primeira: é fila depois, não portão antes.** Confirmou o e-mail, a empresa
+existe e a pessoa entra na hora. A alternativa — nada existe até alguém
+aprovar — mataria a tomada de CNPJ de vez, e junto com ela o autoatendimento:
+todo cliente novo esperaria uma pessoa, e num fim de semana isso é dois dias
+parado. O abuso é raro; a espera seria de todo mundo.
+
+**Segunda: a conta não é chave mestra.** Ela vê cadastro — nome, CNPJ, quem
+pediu, quando, quantos usuários. Não vê pedido, produtor, visita, caderno nem
+receita de nenhum cliente.
+
+E essa segunda não depende de alguém ter lembrado de conferir o papel em cada
+rota:
+
+```
+sessão de plataforma  →  não põe tenant no contexto
+                      →  nenhuma política de negócio casa
+                      →  as tabelas de negócio respondem vazio
+```
+
+O que sobra é o que três funções devolvem — `app.moderacao_empresas`,
+`app.moderacao_pendentes` e `app.moderar_empresa`. **Auditar o alcance dessa
+conta é ler três assinaturas.** Da lista de usuários de cada cliente ela recebe
+só o gestor mais antigo, que é quem pediu o cadastro: a lista de consultores de
+um cliente não é assunto de quem modera CNPJ.
+
+| Ação | O que faz |
+|---|---|
+| **Aprovar** | marca revisado, com quem olhou e quando. Não mexe em mais nada |
+| **Recusar** | desliga a empresa **e** devolve o CNPJ, junto, mais o motivo (o banco exige) |
+| **Reabrir** | desfaz a recusa — e recusa se o CNPJ já foi para outra empresa nesse meio-tempo |
+
+Recusar faz as duas coisas juntas porque **uma sem a outra não resolve**:
+desligar sem soltar deixa o dono de verdade sem conseguir se cadastrar, e soltar
+sem desligar deixa o impostor usando o sistema.
+
+**Soltar o CNPJ sem apagar nada.** `tenant.documento` era único e ponto; agora a
+unicidade é um índice parcial sobre as reivindicações **vivas**
+(`where liberado_em is null`). A empresa recusada continua na tabela, com o CNPJ
+verdadeiro, a data em que foi solto, quem recusou e por quê — apagar a linha
+apagaria justamente o que alguém vai querer ler quando a ligação chegar.
+
+A identidade mora em `plataforma_usuario`, **tabela separada de `usuario`**: um
+bit de "vê tudo" convivendo com as contas dos clientes fica a um engano de
+distância de virar escalação de privilégio. O login é porta própria
+(`POST /auth/plataforma/entrar`), e não `/auth/login` com um campo a mais, pelo
+mesmo motivo — mas divide o freio de força bruta, porque quem martela um e-mail
+não deve ganhar uma segunda cota de tentativas só por bater noutra porta. A
+sessão dura **4 h**: é a que menos pode ficar esquecida aberta.
+
+```bash
+npm run admin -- plataforma "João" joao@colheit.ai
+npm run admin -- senha-plataforma joao@colheit.ai
+```
+
+A conta nasce **só por aí**, e usa o mesmo bilhete de senha das outras
+identidades — `recuperacao_senha` passou a aceitar um dono de cada lado, com um
+`check` de que é exatamente um. A tela de plataforma **não tem "esqueci minha
+senha"**: essa conta não tem gestor acima dela nem outro moderador a quem pedir,
+então quem esquece depende da máquina. Para uma conta que desliga o sistema de
+uma empresa inteira, é assim que tem de ser.
 
 ## Registro de visita — e a H1 medida
 

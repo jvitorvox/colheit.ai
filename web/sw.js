@@ -21,7 +21,8 @@ const ARQUIVOS = ['/', '/index.html', '/app.js', '/base.css', '/manifest.json', 
 // O aplicativo de campo também fica de fora, por outro motivo: ele tem o
 // `consultor-sw.js` dele, com fila de escrita. Dois service workers mexendo no
 // mesmo cache seria um limpando o que o outro acabou de guardar.
-const FORA = (p) => p.startsWith('/empresa') || p.startsWith('/consultor');
+const FORA = (p) => p.startsWith('/empresa') || p.startsWith('/consultor')
+  || p.startsWith('/plataforma');
 
 self.addEventListener('install', (ev) => {
   ev.waitUntil(caches.open(CASCA).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));

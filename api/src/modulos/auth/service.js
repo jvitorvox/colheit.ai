@@ -2,7 +2,7 @@ import { comContexto, semContexto } from '../../contexto.js';
 import { ErroDeUso, NaoEncontrado } from '../../http/erros.js';
 import * as repo from './repository.js';
 import { gerarHash, conferir, gerarCodigo, hashCodigo, gerarToken, hashToken } from './senha.js';
-import { tokenDeUsuario, tokenDeProdutor } from './token.js';
+import { tokenDeUsuario, tokenDeProdutor, tokenDePlataforma } from './token.js';
 import { correioLigado, enviarRecuperacao, enderecoPublico } from './correio.js';
 
 const CREDENCIAL_INVALIDA = 'e-mail ou senha inválidos';
@@ -44,6 +44,42 @@ export function entrarComoUsuario({ email, senha }) {
 function recusarOuSeguir(r) {
   if (r.recusa) throw new ErroDeUso(r.recusa);
   return r;
+}
+
+/**
+ * Login de quem modera cadastro.
+ *
+ * Porta própria, tabela própria, tipo de token próprio — e não `/auth/login`
+ * com um campo a mais. Uma porta que às vezes devolve uma sessão de plataforma
+ * é uma porta onde um engano de consulta vira escalação de privilégio; separada
+ * assim, o pior que um engano aqui faz é recusar quem devia entrar.
+ *
+ * O freio de força bruta é o mesmo, e é compartilhado de propósito: a chave é o
+ * e-mail, e quem martela um e-mail não deve ganhar uma segunda cota de
+ * tentativas só por bater numa porta diferente.
+ */
+export function entrarComoPlataforma({ email, senha }) {
+  const chave = String(email ?? '').trim().toLowerCase();
+  if (!chave || !senha) throw new ErroDeUso(CREDENCIAL_INVALIDA);
+
+  return semContexto(async (cx) => {
+    if (await repo.bloqueado(cx, chave)) {
+      return { recusa: 'tentativas demais; tente de novo mais tarde' };
+    }
+
+    const cred = await repo.credencialDePlataforma(cx, chave);
+    const ok = await conferir(senha, cred?.senha_hash ?? null);
+    if (!ok) {
+      await repo.registrarFalha(cx, chave);
+      return { recusa: CREDENCIAL_INVALIDA };
+    }
+
+    await repo.limparFalhas(cx, chave);
+    return {
+      token: tokenDePlataforma({ id: cred.id }),
+      usuario: { id: cred.id, nome: cred.nome },
+    };
+  }).then(recusarOuSeguir);
 }
 
 /**

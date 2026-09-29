@@ -7,6 +7,7 @@ import { tratarErro } from './http/erros.js';
 import { rotasAuth } from './modulos/auth/rotas.js';
 import { rotasCadastro } from './modulos/cadastro/rotas.js';
 import { rotasConta } from './modulos/conta/rotas.js';
+import { rotasPlataforma } from './modulos/plataforma/rotas.js';
 import { rotasPedidos } from './modulos/pedidos/rotas.js';
 import { rotasPush } from './modulos/push/rotas.js';
 import { rotasCaptura } from './modulos/captura/rotas.js';
@@ -67,6 +68,10 @@ export function criarApp() {
   api.use('/caderno', rotasCaderno);
   api.use('/midia', rotasMidia);
   api.use('/painel', rotasPainel);
+
+  // Moderação de cadastro. Sessão de plataforma, que não tem tenant — e por
+  // isso não alcança nenhuma das rotas acima nem as tabelas por trás delas.
+  api.use('/plataforma', rotasPlataforma);
 
   api.use((_req, res) => res.status(404).json({ erro: 'rota não encontrada' }));
   api.use(tratarErro);
