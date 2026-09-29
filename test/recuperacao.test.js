@@ -138,6 +138,16 @@ test('o link destranca quem se trancou tentando lembrar a senha', async () => {
     'sem isto ele acabaria de escolher uma senha para continuar bloqueado 15 minutos');
 });
 
+test('servidor de e-mail caído não vira erro na cara de quem pediu', async () => {
+  // Servidor de e-mail cai, recusa, demora — e nada disso é culpa nem problema
+  // de quem preencheu o formulário. A falha vai para o log de quem opera.
+  usarCorreio(() => { throw new Error('ECONNREFUSED 10.0.0.1:587'); });
+  const r = await req('/auth/esqueci', { metodo: 'POST', corpo: { email: 'bruno@3t.com' } });
+  assert.equal(r.status, 202, 'não é 500: a pessoa não tem o que fazer com isso');
+  assert.equal(r.corpo.autoatendimento, true);
+  usarCorreio((msg) => { caixa.push(msg); });
+});
+
 /* ------------------------------------------------- o bilhete em si */
 
 test('serve uma vez', async () => {

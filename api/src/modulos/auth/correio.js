@@ -25,6 +25,29 @@ export function correioLigado() {
 }
 
 /**
+ * Entrega, e não deixa a falha virar erro de quem pediu.
+ *
+ * Servidor de e-mail cai, recusa, demora. Nada disso é culpa de quem preencheu
+ * o formulário, e nada disso ele consegue resolver — devolver "erro interno"
+ * para alguém que pediu a própria senha de volta só troca uma espera por um
+ * susto. A falha vai inteira para o log, que é onde quem opera vai procurar.
+ *
+ * O que NÃO se faz aqui é engolir em silêncio: `console.error` com o endereço e
+ * o motivo, uma linha por falha.
+ */
+async function entregar(msg, registro = console) {
+  if (!enviarAtual) return false;
+  try {
+    await enviarAtual(msg);
+    return true;
+  } catch (erro) {
+    registro.error?.(
+      `correio FALHOU ao mandar "${msg.assunto}" para ${msg.para}: ${erro.message}`);
+    return false;
+  }
+}
+
+/**
  * Manda o bilhete. Devolve false quando não há correio — a ausência é estado
  * previsto, não erro, e quem chama decide o que dizer na tela.
  */
@@ -43,8 +66,7 @@ export async function enviarRecuperacao({ nome, email, url, minutos }) {
     + 'quem pediu não recebeu nada além desta mesma frase.',
   ].join('\n');
 
-  await enviarAtual({ para: email, assunto: 'Redefinir sua senha do colheit.ai', texto });
-  return true;
+  return entregar({ para: email, assunto: 'Redefinir sua senha do colheit.ai', texto });
 }
 
 /**
@@ -86,12 +108,11 @@ export async function enviarCadastro({ situacao, nome, empresa, email, url, hora
     ],
   };
 
-  await enviarAtual({
+  return entregar({
     para: email,
     assunto: situacao === 'nova' ? 'Confirme a conta do colheit.ai' : 'Sobre seu cadastro no colheit.ai',
     texto: textos[situacao].join('\n'),
   });
-  return true;
 }
 
 /* --------------------------------------------------------------- a trava */
@@ -149,22 +170,116 @@ export async function ligarSeConfigurado({ registro = console } = {}) {
     return { ligado: true, host: 'registro (log)', de };
   }
 
+  const { transporte, porta } = construirTransporte(nodemailer);
+
+  usarCorreio(({ para, assunto, texto }) =>
+    transporte.sendMail({ from: de, to: para, subject: assunto, text: texto }));
+
+  return { ligado: true, host, porta, de };
+}
+
+/**
+ * O transporte, com os tempos-limite que o padrão não põe.
+ *
+ * Sem eles a espera padrão é de minutos, e ela acontece DENTRO da requisição:
+ * `/auth/esqueci` e `/conta/cadastro` aguardam o envio, então um servidor de
+ * e-mail pendurado pendura junto quem está na tela — e, com conexões presas,
+ * derruba a API inteira antes de derrubar só o e-mail.
+ *
+ * Dez segundos é generoso para um servidor são e curto para um doente.
+ */
+function construirTransporte(nodemailer) {
   const porta = Number(process.env.SMTP_PORTA ?? 587);
   const transporte = nodemailer.createTransport({
-    host,
+    host: process.env.SMTP_HOST,
     port: porta,
     // 465 é TLS desde o primeiro byte; 587 abre em claro e sobe com STARTTLS.
+    // `requireTLS` é o que impede a sessão de seguir em claro se o servidor não
+    // oferecer STARTTLS — sem ele, senha de SMTP passaria pela rede legível.
     secure: porta === 465,
     requireTLS: porta !== 465,
     auth: process.env.SMTP_USUARIO
       ? { user: process.env.SMTP_USUARIO, pass: process.env.SMTP_SENHA }
       : undefined,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
+  return { transporte, porta };
+}
 
-  usarCorreio(({ para, assunto, texto }) =>
-    transporte.sendMail({ from: de, to: para, subject: assunto, text: texto }));
+/**
+ * Prova o SMTP contra o servidor de verdade, e diz em voz alta o que achou.
+ *
+ * São duas etapas separadas de propósito, porque elas falham por motivos
+ * diferentes e a diferença é o diagnóstico inteiro:
+ *
+ *   verificar  → abre a conexão, sobe o TLS e autentica. Se isto falha, o
+ *                problema é host, porta, TLS ou credencial — e nenhuma
+ *                mensagem foi mandada para ninguém.
+ *   enviar     → o servidor aceitou a mensagem. Se isto falha depois de o
+ *                verificar passar, o problema é remetente, destinatário ou
+ *                política de envio, não credencial.
+ *
+ * A senha não aparece na saída, nem quando dá errado.
+ */
+export async function testar(para, { registro = console } = {}) {
+  const host = process.env.SMTP_HOST;
+  if (!host) return { ok: false, etapa: 'configuração', erro: 'SMTP_HOST ausente' };
+  if (host === 'registro') {
+    return {
+      ok: false,
+      etapa: 'configuração',
+      erro: 'SMTP_HOST=registro é o modo de log; não prova nada sobre servidor de verdade',
+    };
+  }
+  const de = process.env.SMTP_DE;
+  if (!de) return { ok: false, etapa: 'configuração', erro: 'SMTP_DE ausente' };
 
-  return { ligado: true, host, de };
+  let nodemailer;
+  try {
+    nodemailer = (await import('nodemailer')).default;
+  } catch {
+    return { ok: false, etapa: 'configuração', erro: 'nodemailer não está instalado' };
+  }
+
+  const { transporte, porta } = construirTransporte(nodemailer);
+  const config = {
+    host,
+    porta,
+    tls: porta === 465 ? 'direto (465)' : 'STARTTLS exigido',
+    usuario: process.env.SMTP_USUARIO || '(sem autenticação)',
+    de,
+  };
+
+  try {
+    await transporte.verify();
+  } catch (erro) {
+    return { ok: false, etapa: 'conexão', config, erro: erro.message };
+  }
+
+  try {
+    const r = await transporte.sendMail({
+      from: de,
+      to: para,
+      subject: 'colheit.ai · teste de correio',
+      text: [
+        'Se esta mensagem chegou, o SMTP do colheit.ai está de pé.',
+        '',
+        `Servidor: ${host}:${porta}`,
+        `Remetente: ${de}`,
+        `Enviada em ${new Date().toISOString()}`,
+        '',
+        'Nenhuma conta foi criada nem alterada por este teste.',
+      ].join('\n'),
+    });
+    registro.log?.(`aceita pelo servidor: ${r.response ?? ''}`.trim());
+    return { ok: true, config, id: r.messageId, aceitos: r.accepted, recusados: r.rejected };
+  } catch (erro) {
+    return { ok: false, etapa: 'envio', config, erro: erro.message };
+  } finally {
+    transporte.close();
+  }
 }
 
 /** O endereço público, para montar o link. Só quem tem APP_URL manda e-mail. */

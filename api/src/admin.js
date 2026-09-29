@@ -63,6 +63,43 @@ async function empresa([nome, documento, tipo, gestor, email]) {
 }
 
 /**
+ * Prova o SMTP contra o servidor de verdade.
+ *
+ * Existe porque a entrega por e-mail era a única peça desta base que nunca
+ * tinha encostado num servidor real: o fluxo do bilhete está testado ponta a
+ * ponta com um entregador falso, e entregador falso não descobre certificado
+ * vencido, porta bloqueada, remetente recusado nem senha de aplicativo errada.
+ *
+ * Manda UMA mensagem, para um endereço que você escreve na mão. Não cria conta,
+ * não mexe em conta nenhuma, e não é o caminho de recuperação de senha — é só
+ * o cano.
+ */
+async function correio([para]) {
+  if (!para) throw new Error('uso: correio <e-mail de destino>');
+  const { testar } = await import('./modulos/auth/correio.js');
+  const r = await testar(para);
+
+  if (r.config) {
+    console.log(`servidor   ${r.config.host}:${r.config.porta}  (${r.config.tls})`);
+    console.log(`usuário    ${r.config.usuario}`);
+    console.log(`remetente  ${r.config.de}`);
+    console.log('');
+  }
+
+  if (!r.ok) {
+    // A etapa é o diagnóstico: conexão aponta para host/porta/TLS/credencial,
+    // envio aponta para remetente, destinatário ou política do provedor.
+    throw new Error(`falhou na ${r.etapa}: ${r.erro}`);
+  }
+
+  console.log(`conexão    ok — abriu, subiu o TLS e autenticou`);
+  console.log(`envio      aceito pelo servidor (${r.id})`);
+  if (r.recusados?.length) console.log(`recusados  ${r.recusados.join(', ')}`);
+  console.log(`\nMandada para ${para}. Confira a caixa — e o spam, que é onde`);
+  console.log('mensagem de domínio novo costuma cair.');
+}
+
+/**
  * A conta que modera cadastro.
  *
  * Nasce só por aqui, e não por tela nenhuma: é a única conta da plataforma que
@@ -233,7 +270,7 @@ async function exigirTipo(id, tipo) {
 }
 
 const COMANDOS = {
-  empresa, territorio, rede, senha, plataforma, empresas,
+  empresa, territorio, rede, senha, plataforma, correio, empresas,
   'senha-plataforma': senhaPlataforma,
 };
 
@@ -249,4 +286,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .catch((erro) => { console.error(erro.message); process.exit(1); });
 }
 
-export { empresa, territorio, rede, senha, plataforma, senhaPlataforma, empresas };
+export { empresa, territorio, rede, senha, plataforma, senhaPlataforma, correio, empresas };
