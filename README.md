@@ -1254,10 +1254,63 @@ GET  /visitas/h1         mediana e p90 por canal, com o veredito — só empresa
 POST /visitas            registra; aceita `clienteId` (ver o app do consultor)
 ```
 
-O console cronometra a si mesmo: o relógio começa quando a janela abre e para no
-envio. Vem do cliente, então é indicativo — serve para ver tendência e comparar
-canais, não para cobrar ninguém. Registro acima de trinta minutos é descartado: é
-aba esquecida aberta, e envenenaria a mediana que decide o produto.
+Vem do cliente, então é indicativo — serve para ver tendência e comparar canais,
+não para cobrar ninguém. Registro acima de trinta minutos vira nulo, e não um
+valor truncado: é aba esquecida aberta, e envenenaria a mediana que decide o
+produto.
+
+### O que o instrumento media errado
+
+A 018 disse que a medição seria contínua em vez de um dia de campo com
+cronômetro. E era — só que o instrumento tinha três defeitos, e eles só ficaram
+visíveis quando chegou a hora de levá-lo a campo de verdade.
+
+**O console se carimbava como `app`.** A janela de visita do console cronometra
+a si mesma e gravava `canal: 'app'`. Mas quem digita ali é o gestor: sentado,
+com teclado de verdade, sem sol na tela e sem luva — e caía no mesmo balde do
+consultor no meio do talhão. O agravante é a direção do erro: digitar na mesa é
+**mais rápido**, então a mistura puxava a mediana para baixo e fazia a hipótese
+parecer confirmada. Para o número que decide o produto, é o pior viés possível.
+Agora é um canal próprio, `console`, fora do veredito — e visível, com a
+contagem, porque somi-lo em silêncio esconderia de onde vem parte do movimento.
+
+**O WhatsApp não tinha relógio nenhum.** A duração do relato validado vinha do
+corpo do POST de validação, e a tela de validação nunca mandou nada: zero
+medidas justamente no canal que a H1 revisada quer comparar com o aplicativo. O
+remendo óbvio seria gravar ali o tempo de quem valida — e seria pior que a
+lacuna, porque é um agrônomo na mesa, não o consultor na lavoura: um número com
+cara de comparável medindo outra pessoa, em outro lugar, fazendo outra coisa.
+
+A medida honesta é **a duração do áudio**, que o WhatsApp informa e que foi
+medida no aparelho de quem falou, no instante em que falou:
+
+```
+aplicativo → tela abre ......... toque em Registrar
+whatsapp   → botão pressionado .. botão solto
+```
+
+Os dois deixam de fora o caminho até ali — achar o produtor na fila, achar a
+conversa —, e é por isso que são comparáveis entre si. Áudio sem duração
+informada fica nulo: lacuna honesta é melhor que número inventado para preencher
+coluna.
+
+**Não havia piso de amostra.** Mediana de três visitas saía com a mesma cara de
+mediana de trezentas. Agora, abaixo de **20 medições**, o que aparece é `amostra
+curta` — não um veredito disfarçado de resultado. O piso mora no serviço, ao
+lado do veredito, e não no banco como o do benchmark: lá a natureza é sigilo, e
+o chamador não pode poder burlar; aqui é honestidade estatística sobre o próprio
+dado de quem olha.
+
+E a medição sai **por consultor**, porque mediana de equipe esconde exatamente o
+que a H1 pergunta: se a pessoa com o aparelho na mão consegue. Um que registra
+em 40 s e outro que desiste e manda áudio viram, juntos, um número que não
+descreve nenhum dos dois.
+
+> **O que continua fora do alcance do código.** Nada disso mede a **taxa de
+> registro** — quantas visitas aconteceram e não foram registradas. Um consultor
+> que registra 3 de 10 em 40 segundos não confirma a H1; mostra que o atrito
+> está noutro lugar. Essa pergunta se responde perguntando a ele no fim do dia,
+> e está no roteiro de campo em [PILOTO-H1.md](PILOTO-H1.md).
 
 ### A fila do dia
 

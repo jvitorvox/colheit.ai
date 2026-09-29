@@ -1425,19 +1425,55 @@ function painelH1(h1) {
   h1.porCanal.forEach((canal) => {
     const bom = canal.mediana_seg !== null && canal.mediana_seg < h1.confirmaAbaixoDe;
     const ruim = canal.mediana_seg !== null && canal.mediana_seg > h1.mataAcimaDe;
+    // Nome explícito, e não "whatsapp ? … : formulário". Antes de o console
+    // virar canal próprio, ele caía no `else` e aparecia como "Formulário no
+    // app" com 7s e selo de confirma — mentira convincente no cartão que
+    // decide o produto. Canal desconhecido agora mostra o próprio nome.
     const cartao = numeroCartao(
-      canal.canal === 'whatsapp' ? 'Áudio no WhatsApp' : 'Formulário no app',
+      { app: 'Formulário no app', whatsapp: 'Áudio no WhatsApp' }[canal.canal] ?? canal.canal,
       canal.mediana_seg === null ? '—' : `${canal.mediana_seg}s`,
       `mediana · ${canal.visitas} visita(s) · p90 ${canal.p90_seg ?? '—'}s`,
     );
-    const veredito = el('span', bom ? 'selo feito' : ruim ? 'selo ruim' : 'selo',
-      bom ? 'confirma' : ruim ? 'mata' : 'na faixa cinzenta');
+    // Sem amostra não há veredito. Um selo "confirma" sobre seis medições é
+    // pior que selo nenhum: alguém decide o produto olhando para ele.
+    const veredito = h1.amostraCurta
+      ? el('span', 'selo', 'amostra curta')
+      : el('span', bom ? 'selo feito' : ruim ? 'selo ruim' : 'selo',
+        bom ? 'confirma' : ruim ? 'mata' : 'na faixa cinzenta');
     cartao.append(veredito);
     grade.append(cartao);
   });
   c.append(grade);
-  c.append(el('p', 'sub',
-    `Abaixo de ${h1.confirmaAbaixoDe}s confirma a hipótese; acima de ${h1.mataAcimaDe}s a derruba.`));
+
+  c.append(el('p', 'sub', h1.amostraCurta
+    ? `${h1.medidas} de ${h1.minimoParaVeredito} medições. Abaixo disso a mediana `
+      + 'ainda é ruído, e o veredito fica de fora até haver amostra.'
+    : `Abaixo de ${h1.confirmaAbaixoDe}s confirma a hipótese; acima de ${h1.mataAcimaDe}s a derruba.`));
+
+  // Mediana de equipe esconde justamente o que a H1 pergunta: se a pessoa com
+  // o aparelho na mão consegue. Um que registra em 40 s e outro que desiste
+  // viram um número que não descreve nenhum dos dois.
+  if (h1.porPessoa?.length) {
+    const lista = el('div', 'cartao');
+    lista.append(el('p', 'rotulo', 'Por consultor'));
+    h1.porPessoa.forEach((p) => {
+      const l = el('div', 'linha');
+      l.append(el('span', null, p.nome),
+        el('span', 'id', p.canal === 'whatsapp' ? 'áudio' : 'app'),
+        el('span', 'num', p.mediana_seg === null
+          ? `${p.visitas} visita(s) · sem relógio`
+          : `${p.mediana_seg}s · ${p.medidas} de ${p.visitas}`));
+      lista.append(l);
+    });
+    c.append(lista);
+  }
+
+  if (h1.foraDaConta) {
+    c.append(el('p', 'detalhe',
+      `${h1.foraDaConta.visitas} visita(s) digitada(s) aqui no console ficam fora da `
+      + 'conta: quem digita sentado é mais rápido que quem digita no talhão, e '
+      + 'somar os dois faria a hipótese parecer confirmada por causa da mesa.'));
+  }
   return c;
 }
 
@@ -1459,7 +1495,12 @@ function janelaVisita(alvo) {
       metodo: 'POST',
       corpo: {
         produtorId: alvo.produtor_id,
-        canal: 'app',
+        // `console`, não `app`: quem digita aqui é o gestor, sentado, com
+        // teclado de verdade e sem sol na tela. Carimbar como `app` misturava
+        // isso com o consultor no meio do talhão — e, como digitar na mesa é
+        // mais rápido, puxava a mediana para baixo e fazia a H1 parecer
+        // confirmada. Para o número que decide o produto, é o pior viés.
+        canal: 'console',
         duracaoSeg: Math.round((Date.now() - comecou) / 1000),
         estagio: v.estagio || null,
         estande: v.estande ? Number(v.estande) : null,

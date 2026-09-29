@@ -95,6 +95,11 @@ async function traduzir(m, sock) {
       ?? null,
     bytes: null,
     mime: null,
+    // Segundos de áudio, medidos no aparelho de quem falou, no instante em que
+    // falou. É a medição da H1 neste canal — o análogo do cronômetro do
+    // aplicativo, e o único número honesto disponível: quem valida o relato
+    // depois, na mesa, não tem como saber quanto tempo o consultor levou.
+    duracaoSeg: m.message?.audioMessage?.seconds ?? null,
   };
 
   if (bruta.deMim || bruta.deGrupo || bruta.deStatus) return bruta;

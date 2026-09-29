@@ -48,10 +48,11 @@ export async function identificar(dono, telefone, tenantId) {
 export async function gravarEntrada(dono, m) {
   const { rows } = await dono.query(`
     insert into mensagem_whatsapp (tenant_id, telefone, direcao, tipo, texto,
-                                   midia_id, produtor_id, usuario_id)
-    values ($1,$2,'entrada',$3,$4,$5,$6,$7)
+                                   midia_id, produtor_id, usuario_id, duracao_seg)
+    values ($1,$2,'entrada',$3,$4,$5,$6,$7,$8)
     returning id, criado_em`,
-    [m.tenantId, m.telefone, m.tipo, m.texto, m.midiaId, m.produtorId, m.usuarioId]);
+    [m.tenantId, m.telefone, m.tipo, m.texto, m.midiaId, m.produtorId, m.usuarioId,
+      m.duracaoSeg ?? null]);
   return rows[0];
 }
 
@@ -109,8 +110,20 @@ export async function relatos(cx, situacao) {
   return rows;
 }
 
+/**
+ * O relato, com a duração do áudio que o originou.
+ *
+ * Ela vem da mensagem, e não do relato, porque é fato do áudio: foi medida no
+ * aparelho de quem gravou, no instante em que gravou. Quem valida o relato
+ * depois, na mesa, não tem como saber quanto tempo o consultor levou — e
+ * gravar o tempo DELE como se fosse o do consultor seria inventar a medição
+ * que a H1 decide.
+ */
 export async function buscarRelato(cx, id) {
-  const { rows } = await cx.query('select * from relato where id = $1', [id]);
+  const { rows } = await cx.query(`
+    select r.*, m.duracao_seg
+      from relato r join mensagem_whatsapp m on m.id = r.mensagem_id
+     where r.id = $1`, [id]);
   return rows[0] ?? null;
 }
 

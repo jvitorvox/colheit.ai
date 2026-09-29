@@ -53,6 +53,8 @@ export function criarRecebedor({ api, registro = console }) {
     try {
       const r = await api.entregarMensagem({
         de, para, tipo: bruta.tipo, texto: bruta.texto ?? null, midiaId,
+        // Só o áudio tem duração, e é ela que mede a H1 deste canal.
+        duracaoSeg: bruta.duracaoSeg ?? null,
       });
       registro.info?.(`entrada ${bruta.tipo} de ${de}: ${r.desfecho}`);
       return r;

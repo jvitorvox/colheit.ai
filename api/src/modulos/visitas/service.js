@@ -7,9 +7,10 @@ import { textoObrigatorio, umDe, uuidValido, areaValida } from '../cadastro/vali
 // O corte que o bench encontrou no concorrente e que a planilha de origem já
 // gritava em outra forma: produtor sem visita há mais de quinze dias.
 export const DIAS_DE_ALERTA = 15;
-
-// Acima disto não é registro de visita, é aba esquecida aberta. Guardar o
-// número seria envenenar a mediana que decide o produto.
+// Acima disto não é registro de visita: é aba esquecida aberta, ou áudio que
+// virou outra coisa. Guardar o número seria envenenar a mediana que decide o
+// produto — por isso vira nulo, e não um valor truncado que passaria por
+// medição de verdade.
 const DURACAO_MAXIMA_SEG = 60 * 30;
 
 // Bordadura, meio do talhão, praga de perto. Mais que isso não é registro de
@@ -22,7 +23,9 @@ export function registrar(ctx, corpo = {}) {
     propriedadeId: corpo.propriedadeId ? uuidValido(corpo.propriedadeId, 'propriedadeId') : null,
     talhaoId: corpo.talhaoId ? uuidValido(corpo.talhaoId, 'talhaoId') : null,
     em: corpo.em ?? null,
-    canal: umDe(corpo.canal, ['app', 'whatsapp'], 'canal', 'app'),
+    // O canal `console` é quem digita na mesa. Ele existe justamente para NÃO
+    // entrar no veredito da H1 — ver CANAIS_DA_H1 mais abaixo.
+    canal: umDe(corpo.canal, ['app', 'whatsapp', 'console'], 'canal', 'app'),
     duracaoSeg: normalizarDuracao(corpo.duracaoSeg),
     estagio: corpo.estagio ? textoObrigatorio(corpo.estagio, 'estagio', 20) : null,
     estande: areaValida(corpo.estande, 'estande'),
@@ -93,7 +96,7 @@ export function registrarDeRelato(ctx, relato, duracaoSeg) {
   });
 }
 
-function normalizarDuracao(valor) {
+export function normalizarDuracao(valor) {
   if (valor === undefined || valor === null || valor === '') return null;
   const n = Math.round(Number(valor));
   if (!Number.isFinite(n) || n < 0) return null;
@@ -127,26 +130,54 @@ export function fila(ctx) {
   });
 }
 
+// Abaixo de um veredito não se dá: mediana de três visitas tem a mesma cara de
+// mediana de trezentas, e é dessa cara que sai uma decisão de produto tomada
+// sobre ruído. Vinte é pouco para publicar e suficiente para um piloto de uma
+// semana com um consultor — que é exatamente o desenho que a H1 pede.
+//
+// O piso mora aqui, e não no banco como o do benchmark, porque a natureza dele
+// é outra: lá é sigilo, e o chamador não pode poder burlar; aqui é honestidade
+// estatística sobre o próprio dado de quem olha. Ele fica ao lado do veredito
+// porque é parte do veredito.
+const MINIMO_PARA_VEREDITO = 20;
+
+// O console é o gestor na mesa — teclado de verdade, sem sol, sem luva. A H1
+// fala do consultor na lavoura, e misturar puxaria a mediana para baixo.
+const CANAIS_DA_H1 = ['app', 'whatsapp'];
+
 /**
  * Como a H1 está indo.
  *
  * O veredito é do número, não da opinião: abaixo de 60 s de mediana confirma,
  * acima de 90 s mata. Devolver os dois canais lado a lado é o que responde a
  * pergunta que sobrou — se o canal de captura é o WhatsApp ou o aplicativo.
+ *
+ * E nenhum veredito sai sem amostra: enquanto não houver medida bastante, o
+ * que se devolve é `amostra_curta`, que é o estado honesto — não "inconclusivo
+ * por ora" disfarçado de resultado.
  */
 export function medicaoH1(ctx, dias = 90) {
   const janela = Math.min(Math.max(Number(dias) || 90, 1), 730);
   return comContexto(ctx, async (cx) => {
-    const porCanal = await repo.medicaoH1(cx, janela);
-    const todas = porCanal.reduce((s, c) => s + c.visitas, 0);
+    const todos = await repo.medicaoH1(cx, janela);
+    const porCanal = todos.filter((c) => CANAIS_DA_H1.includes(c.canal));
+    const naMesa = todos.find((c) => c.canal === 'console') ?? null;
+
     const medidas = porCanal.reduce((s, c) => s + c.medidas, 0);
     return {
       janelaDias: janela,
-      visitas: todas,
+      visitas: porCanal.reduce((s, c) => s + c.visitas, 0),
       medidas,
       confirmaAbaixoDe: 60,
       mataAcimaDe: 90,
+      minimoParaVeredito: MINIMO_PARA_VEREDITO,
+      amostraCurta: medidas < MINIMO_PARA_VEREDITO,
       porCanal,
+      // Fora da conta, mas visível: quem olha merece saber que existem visitas
+      // digitadas na mesa, e quantas — some-las em silêncio seria esconder de
+      // onde vem parte do movimento da empresa.
+      foraDaConta: naMesa && { canal: 'console', visitas: naMesa.visitas },
+      porPessoa: await repo.medicaoH1PorPessoa(cx, janela),
     };
   });
 }

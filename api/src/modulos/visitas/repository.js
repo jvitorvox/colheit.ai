@@ -97,6 +97,31 @@ export async function medicaoH1(cx, dias) {
 }
 
 /**
+ * A mesma medição, por pessoa. É o que um piloto precisa ler.
+ *
+ * Mediana de uma equipe inteira esconde exatamente o que a H1 pergunta: se o
+ * consultor que está com o aparelho na mão consegue. Um que registra em 40 s e
+ * outro que desiste e manda áudio viram, juntos, um número que não descreve
+ * nenhum dos dois.
+ *
+ * Só `app` e `whatsapp`: `console` é o gestor na mesa, e não é disso que a
+ * hipótese fala.
+ */
+export async function medicaoH1PorPessoa(cx, dias) {
+  const { rows } = await cx.query(`
+    select u.id, u.nome, v.canal,
+           count(*)::int as visitas,
+           count(v.duracao_seg)::int as medidas,
+           percentile_cont(0.5) within group (order by v.duracao_seg)::int as mediana_seg
+      from visita v join usuario u on u.id = v.usuario_id
+     where v.em >= now() - make_interval(days => $1)
+       and v.canal in ('app', 'whatsapp')
+     group by u.id, u.nome, v.canal
+     order by u.nome, v.canal`, [dias]);
+  return rows;
+}
+
+/**
  * Pendura as fotos na visita.
  *
  * `on conflict do nothing` porque o reenvio é o normal deste caminho: a mesma

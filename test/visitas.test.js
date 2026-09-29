@@ -144,6 +144,45 @@ test('a H1 é medida por canal, com mediana e não média', async () => {
   assert.equal(r.corpo.mataAcimaDe, 90);
 });
 
+test('sem amostra não sai veredito', async () => {
+  // Mediana de três visitas tem a mesma cara de mediana de trezentas, e é
+  // dessa cara que sai uma decisão de produto tomada sobre ruído.
+  const r = await req('/visitas/h1', { token: tGestor });
+  assert.equal(r.corpo.minimoParaVeredito, 20);
+  assert.equal(r.corpo.amostraCurta, true, `só ${r.corpo.medidas} medições até aqui`);
+});
+
+test('o que se digita no console não conta como registro de campo', async () => {
+  // Digitar sentado, com teclado de verdade e sem sol na tela, é mais rápido
+  // que digitar no talhão — e como é MAIS rápido, misturar puxaria a mediana
+  // para baixo e faria a hipótese parecer confirmada por causa da mesa.
+  for (const s of [5, 6, 7]) {
+    const r = await req('/visitas', {
+      metodo: 'POST', token: tGestor,
+      corpo: { produtorId: grande, canal: 'console', duracaoSeg: s },
+    });
+    assert.equal(r.status, 201);
+  }
+
+  const r = await req('/visitas/h1', { token: tGestor });
+  assert.equal(r.corpo.porCanal.some((c) => c.canal === 'console'), false,
+    'fora da conta');
+  assert.equal(r.corpo.foraDaConta.visitas, 3,
+    'e visível, porque some-las em silêncio esconderia de onde vem o movimento');
+
+  const app = r.corpo.porCanal.find((c) => c.canal === 'app');
+  assert.ok(app.mediana_seg > 7, 'a mediana do app não foi puxada pelos 5-7s da mesa');
+});
+
+test('a medição sai por pessoa, que é o que um piloto lê', async () => {
+  const r = await req('/visitas/h1', { token: tGestor });
+  const meu = r.corpo.porPessoa.filter((p) => p.canal === 'app');
+  assert.ok(meu.length >= 1);
+  assert.ok(meu[0].nome && meu[0].mediana_seg !== undefined);
+  assert.equal(r.corpo.porPessoa.some((p) => p.canal === 'console'), false,
+    'o gestor na mesa não é consultor em campo');
+});
+
 /* ---------------------------------------- o laço com a captura por WhatsApp */
 
 test('relato de visita validado vira visita, no canal whatsapp', async () => {
@@ -155,13 +194,17 @@ test('relato de visita validado vira visita, no canal whatsapp', async () => {
 
   const msg = await req('/captura/mensagens', {
     metodo: 'POST', cabecalhos: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
-    corpo: { de: TEL, para: NUMERO, tipo: 'audio', midiaRef: 'midia/visita-1.ogg' },
+    // A duração do áudio, como o WhatsApp a informa. É a medição da H1 neste
+    // canal, e ela chega junto com a mensagem.
+    corpo: { de: TEL, para: NUMERO, tipo: 'audio', midiaRef: 'midia/visita-1.ogg', duracaoSeg: 29 },
   });
   assert.equal(msg.corpo.desfecho, 'relato_pendente');
 
   const antes = (await req('/visitas', { token: tConsultor })).corpo.length;
+  // Corpo vazio de propósito: quem valida é um agrônomo na mesa, e o tempo
+  // DELE não é o esforço do consultor na lavoura. A medição não pode sair daqui.
   const val = await req(`/captura/relatos/${msg.corpo.relatoId}/validar`, {
-    metodo: 'POST', token: tConsultor, corpo: { duracaoSeg: 29 },
+    metodo: 'POST', token: tConsultor, corpo: {},
   });
   assert.equal(val.status, 200);
 
@@ -170,9 +213,43 @@ test('relato de visita validado vira visita, no canal whatsapp', async () => {
 
   const nova = depois.corpo[0];
   assert.equal(nova.canal, 'whatsapp');
-  assert.equal(nova.duracao_seg, 29);
+  assert.equal(nova.duracao_seg, 29, 'veio do áudio, não de quem validou');
   assert.equal(nova.estagio, 'V6');
   assert.match(nova.observacao, /estande bom/);
+});
+
+test('o tempo de quem valida não entra na medição', async () => {
+  // Antes disto o canal do WhatsApp ficava SEM medida nenhuma — a tela de
+  // validação nunca mandou duração —, e o remendo óbvio seria gravar ali o
+  // tempo do agrônomo. Seria pior que a lacuna: um número com cara de
+  // comparável que mede outra pessoa, em outro lugar, fazendo outra coisa.
+  usarExtrator(async () => ({
+    transcricao: 'Passei na Gleba 2.', extraido: { estagio: 'V8' }, tipo: 'visita',
+  }));
+  const msg = await req('/captura/mensagens', {
+    metodo: 'POST', cabecalhos: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    corpo: { de: TEL, para: NUMERO, tipo: 'audio', midiaRef: 'midia/visita-2.ogg', duracaoSeg: 41 },
+  });
+  await req(`/captura/relatos/${msg.corpo.relatoId}/validar`, {
+    metodo: 'POST', token: tConsultor, corpo: { duracaoSeg: 999 },
+  });
+  const nova = (await req('/visitas', { token: tConsultor })).corpo[0];
+  assert.equal(nova.duracao_seg, 41, 'o 999 de quem validou foi ignorado');
+});
+
+test('áudio sem duração informada fica sem relógio, e não inventa um', async () => {
+  usarExtrator(async () => ({
+    transcricao: 'Passei na Gleba 3.', extraido: { estagio: 'V9' }, tipo: 'visita',
+  }));
+  const msg = await req('/captura/mensagens', {
+    metodo: 'POST', cabecalhos: { 'x-gateway-segredo': process.env.GATEWAY_SEGREDO },
+    corpo: { de: TEL, para: NUMERO, tipo: 'audio', midiaRef: 'midia/visita-3.ogg' },
+  });
+  await req(`/captura/relatos/${msg.corpo.relatoId}/validar`, {
+    metodo: 'POST', token: tConsultor, corpo: {},
+  });
+  const nova = (await req('/visitas', { token: tConsultor })).corpo[0];
+  assert.equal(nova.duracao_seg, null, 'lacuna honesta é melhor que número inventado');
 });
 
 test('com os dois canais medidos, a H1 responde qual é mais rápido', async () => {

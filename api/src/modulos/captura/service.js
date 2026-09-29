@@ -51,6 +51,9 @@ export async function receber(entrada) {
     texto: entrada.texto ?? null,
     midiaId: entrada.midiaId ?? null,
     produtorId: quem.produtorId, usuarioId: quem.usuarioId,
+    // Só o áudio tem. É a medição da H1 neste canal, e ela vem do aparelho de
+    // quem gravou — não de quem valida o relato depois, na mesa.
+    duracaoSeg: tipo === 'audio' ? visitas.normalizarDuracao(entrada.duracaoSeg) : null,
   });
 
   // Telefone que ninguém conhece não vira relato. Vira convite a se vincular —
@@ -333,7 +336,11 @@ export function decidir(ctx, id, acao, corpo = {}) {
   // nunca seriam comparáveis, e a H1 revisada pede exatamente essa comparação.
   return decidido.then(async (r) => {
     if (r.situacao !== 'validado') return r;
-    if (r.tipo === 'visita') await visitas.registrarDeRelato(ctx, r, corpo.duracaoSeg);
+    // A duração vem do ÁUDIO, não do corpo desta requisição. Quem chega aqui é
+    // quem valida o relato — um agrônomo na mesa —, e o tempo dele não é o
+    // esforço do consultor na lavoura. Antes desta linha o corpo nunca mandava
+    // nada, e o canal do WhatsApp ficava sem medida nenhuma.
+    if (r.tipo === 'visita') await visitas.registrarDeRelato(ctx, r, r.duracao_seg);
     // Lavoura e lote viram plantio quando a extração trouxe cultivar e marca.
     // Sem os dois não há o que registrar, e inventar a marca seria pior.
     else await caderno.registrarDePlanteRelato(ctx, r);
