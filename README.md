@@ -981,7 +981,7 @@ do dado sempre existiu. **Ninguém subia um cliente sem um DBA ao lado.**
 
 | Decisão | Por quê |
 |---|---|
-| usuário nasce **sem senha** | gerar uma e mostrá-la seria pôr credencial numa tela que alguém fotografa; a linha fica âmbar até o gestor definir |
+| usuário nasce **sem senha** | gerar uma e mostrá-la seria pôr credencial numa tela que alguém fotografa; a linha fica âmbar até alguém abrir o acesso |
 | **desativa**, não apaga | visita, pedido e relato apontam para a pessoa — apagar o autor reescreveria a história de quem esteve na lavoura |
 | o **e-mail não muda** | é a chave de acesso; trocá-la é criar outro usuário |
 | o último **gestor ativo** não sai nem vira consultor | senão a empresa fica sem quem crie usuário, e a saída seria o psql de novo |
@@ -1013,12 +1013,13 @@ sessão atual, nunca sobre um terceiro.
 npm run admin -- empresa "3 Tentos" 11111111000111 distribuidor "Marina" marina@3t.com
 npm run admin -- territorio Sorriso MT <id do franqueado>
 npm run admin -- rede <id do franqueado> <id da franqueadora>
+npm run admin -- senha marina@3t.com
 npm run admin -- empresas
 ```
 
 A empresa e o primeiro gestor nascem na **mesma transação** — empresa sem gestor
-é empresa que ninguém abre. A senha é sorteada e impressa uma vez; pedi-la por
-argumento a deixaria no histórico do shell.
+é empresa que ninguém abre. O que sai é um **link**, não uma senha: nem o comando
+nem quem o rodou chega a saber a senha de ninguém.
 
 Redesenhar território **não reescreve o passado**: `pedido.franqueado_id` é
 carimbo da criação, e o comando diz isso na saída.
@@ -1026,6 +1027,76 @@ carimbo da criação, e o comando diz isso na saída.
 O service worker **deixa `/empresa` de fora**. É aplicação de mesa, com conexão —
 guardar a casca só serviria para servir versão velha a quem trabalha o dia
 inteiro nela.
+
+### Recuperação de senha — uma peça, três portas
+
+O produtor não aparece aqui: ele **nunca teve senha**. Telefone e código pelo
+WhatsApp já são o caminho de volta dele desde o começo, e aquela porta se
+recupera sozinha. O buraco era do lado da empresa — e o fundo dele era o único
+gestor de um cliente esquecendo a senha, sem ninguém a quem pedir.
+
+O que circula em todas as portas é o mesmo **bilhete de uma viagem só**: 256
+bits sorteados, guardados só como hash, que servem para *escolher* uma senha e
+morrem no uso. O que muda entre elas é quem prova a identidade.
+
+| Porta | Quem prova | Prazo | Precisa de quê |
+|---|---|---|---|
+| `POST /auth/esqueci` | a caixa de e-mail — que é a própria chave de acesso | 30 min | SMTP configurado |
+| **Equipe → "Abrir acesso"** | o gestor, entregando o link em mãos | 24 h | nada |
+| `npm run admin -- senha` | o papel dono, na máquina do servidor | 24 h | nada |
+
+O correio nasce desligado, como o extrator, e a recuperação **não depende
+dele** — sem isto abaixo as outras duas portas continuam abertas, e o que falta
+é só o autoatendimento:
+
+```bash
+APP_URL=https://app.exemplo.com    # obrigatório junto com o SMTP; ver abaixo
+SMTP_HOST=smtp.exemplo.com
+SMTP_PORTA=587                     # 465 é TLS desde o primeiro byte; 587 sobe com STARTTLS
+SMTP_USUARIO=                      # vazio = servidor sem autenticação
+SMTP_SENHA=
+SMTP_DE=colheit.ai <nao-responda@exemplo.com>
+```
+
+**O gestor deixou de definir a senha de alguém.** A rota
+`POST /auth/usuarios/:id/senha` saiu, e `app.definir_senha` perdeu o `execute`
+do papel de aplicação. Senha que duas pessoas conhecem não é senha: quem
+reaproveita a mesma em outro sistema passa a ter esse sistema conhecido também
+— e no caminho até a pessoa ela ainda passaria por uma mensagem em texto puro.
+
+Três prazos e três detalhes que não são estilo:
+
+- **O bilhete viaja no fragmento** (`/empresa#senha=…`), nunca na busca. O que
+  vem depois do `?` chega ao servidor, entra no log de acesso e sai no `Referer`
+  de qualquer imagem que a página carregue. O que vem depois do `#` fica no
+  navegador — e a tela o apaga da barra de endereço assim que o lê.
+- **`APP_URL` é obrigatório junto com o SMTP.** Sem ele a API teria de adivinhar
+  o próprio endereço pelo cabeçalho `Host`, que quem faz a requisição escolhe: um
+  `Host` forjado mandaria para a caixa da vítima um link legítimo apontando para
+  o servidor de outra pessoa.
+- **O freio de "esqueci" é próprio, e não o do login.** Se um pedido de
+  recuperação contasse como falha de senha, qualquer um trancaria a conta alheia
+  só apertando o botão — a recuperação viraria a negação do serviço. O que existe
+  é um pedido por minuto por pessoa, e a resposta é a mesma de qualquer jeito.
+
+Trocar a senha **destranca o login**: quem esqueceu errou cinco vezes antes de
+lembrar que existe "esqueci", e sem isso acabaria de escolher uma senha nova
+para continuar bloqueado quinze minutos.
+
+Sem correio configurado a frase da tela muda, e tem de mudar: dizer "o e-mail
+chega em instantes" numa instalação que não manda e-mail é mandar a pessoa
+esperar por algo que não vem. O que ela ouve é por onde ir — o gestor.
+
+> **Duas coisas que esta parte NÃO faz.**
+>
+> A entrega por SMTP **nunca foi exercitada contra um servidor de e-mail de
+> verdade**. O fluxo do bilhete está testado ponta a ponta, com um entregador
+> falso; a entrega em si, não.
+>
+> Redefinir a senha **não derruba as sessões abertas**. O token é JWT e vale até
+> 12 h; conferir a cada requisição se a senha mudou depois dele significa uma
+> leitura no banco no caminho quente, que é decisão de arquitetura própria. Para
+> quem esqueceu a senha isso não muda nada — para quem foi invadido, muda.
 
 ## Registro de visita — e a H1 medida
 

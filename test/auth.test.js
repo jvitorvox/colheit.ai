@@ -171,23 +171,24 @@ test('a sessão do portal não entra na área da empresa', async () => {
   assert.match(r.corpo.erro, /área da empresa/);
 });
 
-test('só gestor define senha, e só de gente da própria empresa', async () => {
+test('só gestor abre acesso, e só de gente da própria empresa', async () => {
+  // O gestor não escolhe mais a senha de ninguém: ele abre um bilhete de uma
+  // viagem só e entrega. Quem escolhe a senha é o dono dela.
   const tAna = await entrar(req, 'ana@alfa.com');
-  const negado = await req(`/auth/usuarios/${ana}/senha`, {
-    metodo: 'POST', token: tAna, corpo: { senha: 'outra-senha-boa-123' },
-  });
+  const negado = await req(`/auth/usuarios/${ana}/acesso`, { metodo: 'POST', token: tAna });
   assert.equal(negado.status, 400);
   assert.match(negado.corpo.erro, /só gestor/);
 
   const tGestora = await entrar(req, 'gestora@alfa.com');
-  const alheio = await req(`/auth/usuarios/${deOutra}/senha`, {
-    metodo: 'POST', token: tGestora, corpo: { senha: 'outra-senha-boa-123' },
-  });
+  const alheio = await req(`/auth/usuarios/${deOutra}/acesso`, { metodo: 'POST', token: tGestora });
   assert.equal(alheio.status, 404, 'de outra empresa: não existe, do ponto de vista dela');
 
-  const ok = await req(`/auth/usuarios/${ana}/senha`, {
-    metodo: 'POST', token: tGestora, corpo: { senha: 'outra-senha-boa-123' },
+  const ok = await req(`/auth/usuarios/${ana}/acesso`, { metodo: 'POST', token: tGestora });
+  assert.equal(ok.status, 201);
+
+  const escolheu = await req('/auth/redefinir', {
+    metodo: 'POST', corpo: { token: ok.corpo.token, senha: 'outra-senha-boa-123' },
   });
-  assert.equal(ok.status, 200);
+  assert.equal(escolheu.status, 200);
   assert.ok(await entrar(req, 'ana@alfa.com', 'outra-senha-boa-123'));
 });

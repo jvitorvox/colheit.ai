@@ -87,8 +87,12 @@ function telaEntrar() {
   const botao = el('button', 'botao', 'Entrar'); botao.type = 'submit';
   const erro = el('p', 'erro');
 
+  const esqueci = el('button', 'elo', 'Esqueci minha senha');
+  esqueci.type = 'button';
+  esqueci.onclick = () => janelaEsqueci(email.value);
+
   form.append(el('label', 'rotulo', 'E-mail'), email,
-    el('div', 'campo'), el('label', 'rotulo', 'Senha'), senha, botao, erro);
+    el('div', 'campo'), el('label', 'rotulo', 'Senha'), senha, botao, erro, esqueci);
   form.onsubmit = async (ev) => {
     ev.preventDefault();
     botao.disabled = true; erro.textContent = '';
@@ -105,6 +109,75 @@ function telaEntrar() {
   c.append(form);
   $('#raiz').replaceChildren(c);
   email.focus();
+}
+
+/* ------------------------------------------------------ recuperar a senha */
+
+/**
+ * Esqueci minha senha.
+ *
+ * A resposta vem pronta da API e é mostrada como veio, sem a tela inventar
+ * nada em cima: é ela que sabe se aquela instalação manda e-mail, e é ela que
+ * responde igual para e-mail conhecido e desconhecido. Se esta tela dissesse
+ * "enviamos para você", estaria afirmando o que não sabe — e entregando quais
+ * e-mails existem a quem for perguntando um a um.
+ */
+function janelaEsqueci(email) {
+  janela('Esqueci minha senha', [
+    { nome: 'email', rotulo: 'Seu e-mail', tipo: 'email', valor: email },
+  ], async (v) => {
+    const r = await api('/auth/esqueci', { metodo: 'POST', corpo: { email: v.email } });
+    // `janela` fecha e redesenha depois daqui; o aviso vem no quadro seguinte,
+    // senão ele nasceria numa janela que acabou de ser fechada.
+    setTimeout(() => alerta(r.enviado, 'Recuperar senha'), 0);
+  }, 'Enviar');
+}
+
+/**
+ * A tela de escolher a senha, aberta por um link.
+ *
+ * O bilhete viaja no FRAGMENTO da URL, depois do `#`, e não na busca: o que
+ * vem depois do `?` chega ao servidor, entra no log de acesso e sai no
+ * `Referer` de qualquer imagem que a página carregue. O fragmento fica no
+ * navegador. Aqui ele é lido, apagado da barra de endereço e mandado por POST.
+ *
+ * Funciona com sessão ou sem — quem chegou por este link normalmente não
+ * consegue entrar, que é o motivo de ele existir.
+ */
+function telaNovaSenha(token) {
+  document.body.classList.add('entrando');
+  const c = el('div', 'entrada cartao');
+  c.append(el('h1', 'marca', 'colheit.ai'));
+  c.append(el('p', 'sub', 'Escolha uma senha'));
+
+  const form = el('form');
+  const senha = el('input');
+  Object.assign(senha, { type: 'password', required: true, minLength: 8, autocomplete: 'new-password' });
+  const repete = el('input');
+  Object.assign(repete, { type: 'password', required: true, minLength: 8, autocomplete: 'new-password' });
+  const botao = el('button', 'botao', 'Salvar senha'); botao.type = 'submit';
+  const erro = el('p', 'erro');
+
+  form.append(el('label', 'rotulo', 'Nova senha (mínimo 8 caracteres)'), senha,
+    el('div', 'campo'), el('label', 'rotulo', 'Repita a senha'), repete, botao, erro);
+
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    erro.textContent = '';
+    // Conferido aqui porque é erro de digitação, não de regra: mandar para a
+    // API gastaria o bilhete, que serve uma vez só.
+    if (senha.value !== repete.value) { erro.textContent = 'as duas senhas não são iguais'; return; }
+    botao.disabled = true;
+    try {
+      await api('/auth/redefinir', { metodo: 'POST', corpo: { token, senha: senha.value } });
+      sair();   // sessão antiga, se houver, não serve mais como referência
+      alerta('Senha salva. Agora é só entrar.', 'Pronto');
+    } catch (e) { erro.textContent = e.message; botao.disabled = false; }
+  };
+
+  c.append(form);
+  $('#raiz').replaceChildren(c);
+  senha.focus();
 }
 
 /* ------------------------------------------------------------------ casca */
@@ -725,9 +798,12 @@ async function telaEquipe(main) {
     equipe.map((u) => {
       const botoes = el('div', 'acoes');
       if (souGestor) {
-        const senha = el('button', 'botao vazado pequeno', u.tem_senha ? 'Trocar senha' : 'Definir senha');
-        senha.onclick = (ev) => { ev.stopPropagation(); janelaSenha(u); };
-        botoes.append(senha);
+        // Não "Definir senha": o gestor não escolhe a senha de ninguém. O que
+        // ele faz é abrir um acesso — um link de uma viagem só, que ele entrega
+        // e que a própria pessoa usa para escolher a senha dela.
+        const acesso = el('button', 'botao vazado pequeno', u.tem_senha ? 'Novo acesso' : 'Abrir acesso');
+        acesso.onclick = (ev) => { ev.stopPropagation(); janelaAcesso(u); };
+        botoes.append(acesso);
 
         if (u.papel === 'consultor') {
           // Não "Carteira": a aba lateral já se chama assim e é outra coisa —
@@ -783,12 +859,63 @@ function janelaNovoUsuario() {
   // quando quiser, e vê de relance quais faltam.
 }
 
-function janelaSenha(u) {
-  janela(`Senha de ${u.nome}`, [
-    { nome: 'senha', rotulo: 'Nova senha (mínimo 8 caracteres)', tipo: 'password' },
-  ], (v) => api(`/auth/usuarios/${u.id}/senha`, {
-    metodo: 'POST', corpo: { senha: v.senha },
-  }), 'Definir');
+/**
+ * Abre acesso para alguém da equipe.
+ *
+ * O gestor não digita senha de outra pessoa. Senha que duas pessoas conhecem
+ * não é senha: quem reaproveita a mesma em outro sistema passa a ter esse
+ * sistema conhecido também — e no caminho até a pessoa ela ainda passaria por
+ * uma mensagem de WhatsApp em texto puro.
+ *
+ * O link aparece UMA vez. Depois disto o banco só tem o hash, e não há de onde
+ * lê-lo de novo — o que a tela oferece então é abrir outro, que mata este.
+ */
+async function janelaAcesso(u) {
+  const d = $('#janela');
+  d.replaceChildren(el('h3', null, `Acesso de ${u.nome}`), el('p', 'sub', 'Abrindo…'));
+  d.showModal();
+
+  let r;
+  try {
+    r = await api(`/auth/usuarios/${u.id}/acesso`, { metodo: 'POST' });
+  } catch (e) { alerta(e.message); return; }
+
+  const url = `${location.origin}/empresa#senha=${r.token}`;
+  d.replaceChildren(el('h3', null, `Acesso de ${u.nome}`));
+  d.append(el('p', 'sub',
+    `Entregue este link. Ele vale ${r.horas} horas, serve uma vez, e quem escolhe `
+    + 'a senha é a própria pessoa — nem você chega a saber qual é.'));
+
+  // Campo de uma linha rolava para o fim e escondia o começo do endereço.
+  // Este link é lido em voz alta e conferido caractere a caractere quando a
+  // cópia falha, então ele aparece inteiro.
+  const caixa = el('textarea');
+  Object.assign(caixa, { value: url, readOnly: true, rows: 3, className: 'link-acesso' });
+  caixa.onfocus = () => caixa.select();
+  d.append(caixa);
+
+  const aviso = el('p', 'detalhe',
+    'Ele aparece só agora: o banco guarda o link embaralhado, e não há como '
+    + 'mostrá-lo de novo. Se perder, abra outro — o anterior deixa de valer.');
+
+  const fim = el('div', 'fim');
+  const copiar = el('button', 'botao vazado pequeno', 'Copiar');
+  copiar.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      copiar.textContent = 'Copiado';
+    } catch {
+      // Sem permissão de área de transferência o campo continua ali, e
+      // selecionado: dizer "copiado" sem ter copiado seria pior que não copiar.
+      caixa.focus();
+      copiar.textContent = 'Copie do campo';
+    }
+  };
+  const fechar = el('button', 'botao pequeno', 'Pronto');
+  fechar.onclick = () => { d.close(); desenhar(); };
+  fim.append(copiar, fechar);
+  d.append(aviso, fim);
+  caixa.focus();
 }
 
 /**
@@ -1061,9 +1188,11 @@ const janelaNota = (id) => janela('Lançar nota', [
   await telaPedido(id);
 }, 'Lançar');
 
-function alerta(texto) {
+// O título é parâmetro porque nem todo aviso é uma falha: "Senha salva" sob um
+// cabeçalho "Não deu" diz à pessoa que deu errado bem na hora em que deu certo.
+function alerta(texto, titulo = 'Não deu') {
   const d = $('#janela');
-  d.replaceChildren(el('h3', null, 'Não deu'), el('p', 'sub', texto));
+  d.replaceChildren(el('h3', null, titulo), el('p', 'sub', texto));
   const fim = el('div', 'fim');
   const ok = el('button', 'botao pequeno', 'Entendi');
   ok.onclick = () => d.close();
@@ -1103,7 +1232,27 @@ async function desenhar() {
   }
 }
 
-desenhar();
+/**
+ * Chegou por um link de senha? Então a tela é essa, e nenhuma outra.
+ *
+ * O fragmento é lido e apagado da barra de endereço na mesma linha: quem
+ * fechar a aba e reabrir pelo histórico não reabre um bilhete válido, e uma
+ * captura de tela da barra não leva a senha de ninguém junto.
+ */
+function abrirBilheteDaUrl() {
+  const bilhete = new URLSearchParams(location.hash.slice(1)).get('senha');
+  if (!bilhete) return false;
+  history.replaceState(null, '', location.pathname);
+  telaNovaSenha(bilhete);
+  return true;
+}
+
+// Também no `hashchange`, e não só na carga: quem já está com o console aberto
+// e clica no link recebido só troca o fragmento — o navegador não recarrega
+// nada, e sem isto o link simplesmente não fazia efeito nenhum.
+addEventListener('hashchange', abrirBilheteDaUrl);
+
+if (!abrirBilheteDaUrl()) desenhar();
 
 /* ---------------------------------------------------------------- visitas */
 

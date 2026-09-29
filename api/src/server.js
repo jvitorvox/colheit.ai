@@ -16,6 +16,7 @@ import { rotasCaderno } from './modulos/caderno/rotas.js';
 import { rotasMidia } from './modulos/midia/rotas.js';
 import { rotasPainel } from './modulos/painel/rotas.js';
 import { ligarSeAutorizado } from './modulos/captura/extrator.js';
+import { ligarSeConfigurado } from './modulos/auth/correio.js';
 
 const RAIZ_WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 
@@ -78,6 +79,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(ia.ligado
     ? `extrator LIGADO (${ia.modelo}) — plano sem-treino declarado`
     : `extrator desligado (${ia.motivo}) — a fila fica guardada`);
+
+  // Mesma ideia, e pelo mesmo motivo: o teste sobe a API sem nunca herdar um
+  // correio de verdade do ambiente. Sem ele, "esqueci minha senha" fica fora,
+  // e as outras duas portas da recuperação continuam abertas.
+  const correio = await ligarSeConfigurado();
+  console.log(correio.ligado
+    ? `correio LIGADO (${correio.host}, de ${correio.de})`
+    : `correio desligado (${correio.motivo}) — recuperação só pelo gestor e pelo admin`);
 
   criarApp().listen(porta, () => console.log(`api em :${porta}`));
 }

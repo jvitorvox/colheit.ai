@@ -117,9 +117,12 @@ test('o consultor vê só a carteira dele; o gestor vê a empresa', async () => 
   assert.equal(doGestor.corpo.length, 1);
 });
 
-test('o consultor não define senha de ninguém', async () => {
-  const r = await req('/auth/usuarios/00000000-0000-0000-0000-000000000000/senha', {
-    metodo: 'POST', token: tConsultor, corpo: { senha: 'outra-senha-boa-123' },
+test('o consultor não abre acesso para ninguém', async () => {
+  // Nem para si mesmo. Quem recusa é app.abrir_recuperacao_pelo_gestor, por
+  // dentro: ele enxerga o próprio cadastro, então a política deixa passar.
+  const eu = await req('/auth/eu', { token: tConsultor });
+  const r = await req(`/auth/usuarios/${eu.corpo.id}/acesso`, {
+    metodo: 'POST', token: tConsultor,
   });
   assert.equal(r.status, 400);
   assert.match(r.corpo.erro, /só gestor/);

@@ -62,3 +62,20 @@ export function hashCodigo(codigo, telefone) {
     .update(`${process.env.JWT_SEGREDO ?? ''}|${telefone}|${codigo}`)
     .digest('base64');
 }
+
+/**
+ * O bilhete de recuperação: 256 bits sorteados.
+ *
+ * Longo assim porque, enquanto vive, ele vale uma senha — e ninguém o digita,
+ * então não há atrito a economizar. Com esta entropia adivinhar está fora de
+ * questão, e é por isso que o resgate não precisa de contador de tentativas
+ * como o código de seis dígitos precisa.
+ */
+export const gerarToken = () => randomBytes(32).toString('base64url');
+
+/** Mesma decisão de hashCodigo: curto de vida, e scrypt só atrasaria. */
+export function hashToken(token) {
+  return createHash('sha256')
+    .update(`${process.env.JWT_SEGREDO ?? ''}|recuperacao|${token}`)
+    .digest('base64');
+}

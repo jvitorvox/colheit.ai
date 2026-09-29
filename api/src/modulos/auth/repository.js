@@ -15,9 +15,6 @@ export async function credencialDeUsuario(cx, email) {
   return rows[0] ?? null;
 }
 
-export const definirSenha = (cx, usuarioId, hash) =>
-  cx.query('select app.definir_senha($1, $2)', [usuarioId, hash]);
-
 export const criarCodigo = (cx, telefone, hash, minutos) =>
   cx.query('select app.criar_codigo($1, $2, $3)', [telefone, hash, minutos]);
 
@@ -48,4 +45,21 @@ export async function produtorAtual(cx) {
                        from produtor_vinculo v where v.produtor_id = p.id), '[]'::json) as vinculos
       from produtor p where p.id = app.produtor_atual()`);
   return rows[0] ?? null;
+}
+
+/* Recuperação de senha — também antes de haver contexto, também por função. */
+
+export async function abrirRecuperacao(cx, email, hash, minutos) {
+  const { rows } = await cx.query(
+    'select * from app.abrir_recuperacao($1, $2, $3)', [email, hash, minutos]);
+  return rows[0] ?? null;
+}
+
+export const abrirRecuperacaoPeloGestor = (cx, usuarioId, hash, horas) =>
+  cx.query('select app.abrir_recuperacao_pelo_gestor($1, $2, $3)', [usuarioId, hash, horas]);
+
+export async function consumirRecuperacao(cx, hash, senhaHash) {
+  const { rows } = await cx.query(
+    'select app.consumir_recuperacao($1, $2) as id', [hash, senhaHash]);
+  return rows[0].id ?? null;
 }

@@ -14,10 +14,10 @@
 //     11111111000111 revenda "Ana Paula" ana@3t.com
 //   docker compose exec -w /app/api api npm run admin -- territorio Sorriso MT <franqueado>
 //   docker compose exec -w /app/api api npm run admin -- rede <franqueado> <franqueadora>
+//   docker compose exec -w /app/api api npm run admin -- senha ana@3t.com
 //   docker compose exec -w /app/api api npm run admin -- empresas
-import { randomBytes } from 'node:crypto';
 import { dono } from './db.js';
-import { gerarHash } from './modulos/auth/senha.js';
+import { gerarToken, hashToken } from './modulos/auth/senha.js';
 
 const TIPOS = ['franqueadora', 'franqueado', 'industria', 'distribuidor', 'revenda'];
 
@@ -27,10 +27,9 @@ const TIPOS = ['franqueadora', 'franqueado', 'industria', 'distribuidor', 'reven
  * Empresa sem gestor é empresa que ninguém consegue abrir, e gestor sem empresa
  * não existe: ou os dois nascem, ou nenhum nasce.
  *
- * A senha é sorteada e impressa UMA vez. Não fica em lugar nenhum a não ser no
- * hash — quem recebe troca no primeiro acesso, e se perder, o gestor define de
- * novo pela tela. Pedir a senha por argumento deixaria ela no histórico do
- * shell.
+ * O gestor nasce SEM senha, como qualquer usuário criado pela tela. O que sai
+ * daqui é um link de uma viagem só, e quem escolhe a senha é ele — nem esta
+ * linha de comando, nem quem a rodou, chega a conhecer a senha de ninguém.
  */
 async function empresa([nome, documento, tipo, gestor, email]) {
   if (!nome || !documento || !tipo || !gestor || !email) {
@@ -38,7 +37,6 @@ async function empresa([nome, documento, tipo, gestor, email]) {
   }
   if (!TIPOS.includes(tipo)) throw new Error(`tipo deve ser um de: ${TIPOS.join(', ')}`);
 
-  const senha = randomBytes(9).toString('base64url');
   const cx = await dono.connect();
   try {
     await cx.query('begin');
@@ -46,21 +44,73 @@ async function empresa([nome, documento, tipo, gestor, email]) {
       'insert into tenant (nome, documento, tipo) values ($1,$2,$3) returning id',
       [nome, String(documento).replace(/\D/g, ''), tipo]);
     const { rows: [u] } = await cx.query(`
-      insert into usuario (tenant_id, nome, email, papel, senha_hash)
-      values ($1,$2,$3,'gestor',$4) returning id`,
-    [t.id, gestor, String(email).trim().toLowerCase(), await gerarHash(senha)]);
+      insert into usuario (tenant_id, nome, email, papel)
+      values ($1,$2,$3,'gestor') returning id`,
+    [t.id, gestor, String(email).trim().toLowerCase()]);
+    const link = await abrirBilhete(cx, u.id);
     await cx.query('commit');
 
     console.log(`empresa  ${t.id}  ${nome} (${tipo})`);
     console.log(`gestor   ${u.id}  ${email}`);
-    console.log(`senha    ${senha}`);
-    console.log('\nAnote agora: ela não é guardada em lugar nenhum além do hash.');
+    console.log(`\nEntregue este link — ele vale 24 h e serve uma vez:\n${link}`);
   } catch (erro) {
     await cx.query('rollback');
     throw erro;
   } finally {
     cx.release();
   }
+}
+
+/**
+ * O fundo da escada da recuperação de senha.
+ *
+ * Um consultor que esquece a senha pede ao gestor. O gestor que esquece pede a
+ * outro gestor. O único gestor de uma empresa que esquece a senha não tem a
+ * quem pedir — e sem este comando a saída voltaria a ser um `update` no psql,
+ * que é exatamente o que as telas de administração vieram encerrar.
+ *
+ * Roda com o papel dono e alcança qualquer conta da plataforma, de propósito:
+ * é a chave mestra, e o lugar dela é a máquina do servidor, não uma tela.
+ */
+async function senha([email]) {
+  if (!email) throw new Error('uso: senha <e-mail>');
+  const chave = String(email).trim().toLowerCase();
+  const { rows } = await dono.query(`
+    select u.id, u.nome, u.ativo, t.nome as empresa, t.ativo as empresa_ativa
+      from usuario u join tenant t on t.id = u.tenant_id
+     where lower(u.email) = $1`, [chave]);
+  if (rows.length === 0) throw new Error(`nenhuma conta com o e-mail ${chave}`);
+
+  const [u] = rows;
+  // Reativar por tabela seria decisão de outra pessoa tomada às escondidas: o
+  // link não vale para conta desligada, e o comando diz o que fazer antes.
+  if (!u.ativo) throw new Error(`${u.nome} está inativo — reative pela tela Equipe antes`);
+  if (!u.empresa_ativa) throw new Error(`a empresa ${u.empresa} está inativa`);
+
+  console.log(`${u.nome} · ${u.empresa}`);
+  console.log(`\nEntregue este link — ele vale 24 h e serve uma vez:\n${await abrirBilhete(dono, u.id)}`);
+}
+
+/**
+ * O bilhete de senha, do jeito que a API o guarda: só o hash fica.
+ *
+ * Sem APP_URL o comando imprime o caminho em vez de um endereço inventado —
+ * link com o servidor errado é link que não abre, e pior, um que alguém tenta.
+ */
+async function abrirBilhete(cx, usuarioId) {
+  const token = gerarToken();
+  await cx.query(`
+    update recuperacao_senha set usado_em = now()
+     where usuario_id = $1 and usado_em is null`, [usuarioId]);
+  await cx.query(`
+    insert into recuperacao_senha (usuario_id, token_hash, origem, expira_em)
+    values ($1, $2, 'admin', now() + interval '24 hours')`,
+  [usuarioId, hashToken(token)]);
+
+  const base = String(process.env.APP_URL ?? '').replace(/\/+$/, '');
+  return base
+    ? `${base}/empresa#senha=${token}`
+    : `/empresa#senha=${token}\n(cole depois do endereço da instalação; defina APP_URL para sair pronto)`;
 }
 
 /** Um município, um franqueado. A exclusividade é a chave primária. */
@@ -118,7 +168,7 @@ async function exigirTipo(id, tipo) {
   }
 }
 
-const COMANDOS = { empresa, territorio, rede, empresas };
+const COMANDOS = { empresa, territorio, rede, senha, empresas };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [comando, ...resto] = process.argv.slice(2);
@@ -132,4 +182,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .catch((erro) => { console.error(erro.message); process.exit(1); });
 }
 
-export { empresa, territorio, rede, empresas };
+export { empresa, territorio, rede, senha, empresas };

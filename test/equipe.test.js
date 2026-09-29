@@ -56,12 +56,18 @@ test('o gestor cria usuário, e ele nasce SEM senha', async () => {
   assert.equal(semSenha.status, 400, 'sem senha definida, não entra');
 });
 
-test('o gestor define a senha, e aí ele entra', async () => {
+test('o gestor abre acesso, e quem escolhe a senha é o dono dela', async () => {
   const bruno = await achar('bruno@3t.com');
-  const r = await req(`/auth/usuarios/${bruno.id}/senha`, {
-    metodo: 'POST', token: tGestor, corpo: { senha: SENHA },
+  const r = await req(`/auth/usuarios/${bruno.id}/acesso`, {
+    metodo: 'POST', token: tGestor,
   });
-  assert.equal(r.status, 200);
+  assert.equal(r.status, 201);
+  assert.ok(r.corpo.token, 'o link volta uma vez, para o gestor entregar');
+
+  const escolheu = await req('/auth/redefinir', {
+    metodo: 'POST', corpo: { token: r.corpo.token, senha: SENHA },
+  });
+  assert.equal(escolheu.status, 200);
 
   const entrou = await req('/auth/login', {
     metodo: 'POST', corpo: { email: 'bruno@3t.com', senha: SENHA },
