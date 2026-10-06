@@ -27,3 +27,15 @@ export async function garantirAdminFixo(env = process.env) {
   [nome, email, hash]);
   return { ligado: true, email };
 }
+
+// `npm run superadmin` — o passo do deploy, depois da migração. Ao contrário da
+// subida, aqui faltar a variável é erro: quem chamou queria a conta.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  garantirAdminFixo()
+    .then((r) => {
+      if (!r.ligado) throw new Error(r.motivo);
+      console.log(`super admin pronto: ${r.email}`);
+    })
+    .then(() => dono.end())
+    .catch((erro) => { console.error(`super admin não criado: ${erro.message}`); process.exit(1); });
+}
