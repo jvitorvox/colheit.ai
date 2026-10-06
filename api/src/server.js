@@ -19,6 +19,7 @@ import { rotasMidia } from './modulos/midia/rotas.js';
 import { rotasPainel } from './modulos/painel/rotas.js';
 import { ligarSeAutorizado } from './modulos/captura/extrator.js';
 import { ligarSeConfigurado } from './modulos/auth/correio.js';
+import { garantirAdminFixo } from './admin-fixo.js';
 
 const RAIZ_WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 
@@ -96,6 +97,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(correio.ligado
     ? `correio LIGADO (${correio.host}, de ${correio.de})`
     : `correio desligado (${correio.motivo}) — recuperação só pelo gestor e pelo admin`);
+
+  // Falhar aqui não derruba a API: o caso comum é o banco ainda sem migração.
+  try {
+    const admin = await garantirAdminFixo();
+    console.log(admin.ligado
+      ? `admin de plataforma ${admin.email}`
+      : `admin de plataforma desligado (${admin.motivo})`);
+  } catch (erro) {
+    console.log(`admin de plataforma não criado (${erro.message}) — rode a migração e suba de novo`);
+  }
 
   criarApp().listen(porta, () => console.log(`api em :${porta}`));
 }

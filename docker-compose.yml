@@ -85,6 +85,10 @@ services:
       IA_PLANO: ${IA_PLANO}
       IA_MODELO: ${IA_MODELO}
       IA_TIMEOUT_MS: ${IA_TIMEOUT_MS}
+      # Login fixo da /plataforma, criado na subida. Ver api/src/admin-fixo.js.
+      PLATAFORMA_ADMIN_NOME: ${PLATAFORMA_ADMIN_NOME:-Admin}
+      PLATAFORMA_ADMIN_EMAIL: ${PLATAFORMA_ADMIN_EMAIL:-}
+      PLATAFORMA_ADMIN_SENHA: ${PLATAFORMA_ADMIN_SENHA:-}
     ports:
       - "${API_PORT}:3000"
     volumes:
