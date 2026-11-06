@@ -5,8 +5,8 @@
 // é o atalho para ambiente de desenvolvimento e homologação, onde ter um login
 // conhecido vale mais do que rodar um comando a cada banco novo.
 //
-// O .env manda: a cada subida a conta é criada ou alinhada a ele — senha,
-// nome e `ativo`. Trocar a senha é trocar a variável e subir de novo.
+// O .env só cria a conta quando ela ainda não existe; nunca regrava a senha de
+// uma conta que já existe (era assim que a senha padrão voltava a cada subida).
 // Sem PLATAFORMA_ADMIN_EMAIL ou PLATAFORMA_ADMIN_SENHA, nada acontece.
 import { dono } from './db.js';
 import { gerarHash } from './modulos/auth/senha.js';
@@ -20,14 +20,14 @@ const SENHA_PADRAO = 'colheitai-admin';
 const VERSAO_040 = '040_redefine_senha_admin_plataforma.sql';
 const HASH_040 = 'scrypt$16384$8$1$A5PuiQC4lgqDDO0FBwN06Q==$UgAFJn8aKn84/R1piNCNH6h0N1Zzo81FYlgk1o8TGstvks06XqNsTNqo5DhTyLRSaaAumLdoPZK7FpwJBwqIAg==';
 
-export async function redefinirAdminUmaVez() {
+export async function redefinirAdminUmaVez(versao = VERSAO_040) {
   const cx = await dono.connect();
   try {
     await cx.query('begin');
     await cx.query(`create table if not exists schema_migrations (
       versao text primary key, aplicada_em timestamptz not null default now())`);
     const { rowCount } = await cx.query(
-      'insert into schema_migrations (versao) values ($1) on conflict do nothing', [VERSAO_040]);
+      'insert into schema_migrations (versao) values ($1) on conflict do nothing', [versao]);
     if (rowCount === 0) { await cx.query('rollback'); return false; }
     await cx.query(`
       insert into plataforma_usuario (nome, email, senha_hash)
@@ -60,8 +60,7 @@ export async function garantirAdminFixo(env = process.env) {
   await dono.query(`
     insert into plataforma_usuario (nome, email, senha_hash)
     values ($1, $2, $3)
-    on conflict (email) do update
-      set nome = excluded.nome, senha_hash = excluded.senha_hash, ativo = true`,
+    on conflict (email) do nothing`,
   [nome, email, hash]);
   return { ligado: true, email, padrao: senha === SENHA_PADRAO };
 }

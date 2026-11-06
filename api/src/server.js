@@ -123,5 +123,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`admin de plataforma não criado (${erro.message}) — rode a migração e suba de novo`);
   }
 
+  // Depois do admin fixo, de propósito: até aqui ele regravava a senha do .env
+  // a cada subida e desfazia a 040. Esta passada alinha a senha nova uma última
+  // vez; daqui em diante o .env não toca mais em conta existente.
+  try {
+    if (await redefinirAdminUmaVez('041_redefine_admin_depois_do_env')) {
+      console.log('admin de plataforma redefinido (041) e desbloqueado');
+    }
+  } catch (erro) {
+    console.log(`redefinição do admin (041) não aplicada (${erro.message})`);
+  }
+
   criarApp().listen(porta, () => console.log(`api em :${porta}`));
 }
