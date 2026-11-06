@@ -13,6 +13,37 @@ import { gerarHash } from './modulos/auth/senha.js';
 
 const SENHA_PADRAO = 'colheitai-admin';
 
+// A migração 040, embutida no código. A imagem da API copia só `src/`: onde o
+// banco não recebe `db/migrations` (produção sem o bind mount do compose), a
+// 040 nunca rodava. Usa a mesma versão em schema_migrations, então roda uma vez
+// só, venha por aqui ou pelo `migrar`.
+const VERSAO_040 = '040_redefine_senha_admin_plataforma.sql';
+const HASH_040 = 'scrypt$16384$8$1$A5PuiQC4lgqDDO0FBwN06Q==$UgAFJn8aKn84/R1piNCNH6h0N1Zzo81FYlgk1o8TGstvks06XqNsTNqo5DhTyLRSaaAumLdoPZK7FpwJBwqIAg==';
+
+export async function redefinirAdminUmaVez() {
+  const cx = await dono.connect();
+  try {
+    await cx.query('begin');
+    await cx.query(`create table if not exists schema_migrations (
+      versao text primary key, aplicada_em timestamptz not null default now())`);
+    const { rowCount } = await cx.query(
+      'insert into schema_migrations (versao) values ($1) on conflict do nothing', [VERSAO_040]);
+    if (rowCount === 0) { await cx.query('rollback'); return false; }
+    await cx.query(`
+      insert into plataforma_usuario (nome, email, senha_hash)
+      values ('Admin', 'admin@colheit.ai', $1)
+      on conflict (email) do update set senha_hash = excluded.senha_hash, ativo = true`, [HASH_040]);
+    await cx.query(`delete from tentativa_login where chave = 'admin@colheit.ai'`);
+    await cx.query('commit');
+    return true;
+  } catch (erro) {
+    await cx.query('rollback');
+    throw erro;
+  } finally {
+    cx.release();
+  }
+}
+
 export async function garantirAdminFixo(env = process.env) {
   const email = String(env.PLATAFORMA_ADMIN_EMAIL ?? '').trim().toLowerCase();
   const senha = env.PLATAFORMA_ADMIN_SENHA ?? '';

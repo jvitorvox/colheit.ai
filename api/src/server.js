@@ -19,7 +19,7 @@ import { rotasMidia } from './modulos/midia/rotas.js';
 import { rotasPainel } from './modulos/painel/rotas.js';
 import { ligarSeAutorizado } from './modulos/captura/extrator.js';
 import { ligarSeConfigurado } from './modulos/auth/correio.js';
-import { garantirAdminFixo } from './admin-fixo.js';
+import { garantirAdminFixo, redefinirAdminUmaVez } from './admin-fixo.js';
 import { migrar } from './migrar.js';
 
 const RAIZ_WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
@@ -106,6 +106,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     await migrar();
   } catch (erro) {
     console.log(`migração não aplicada na subida (${erro.message})`);
+  }
+  try {
+    if (await redefinirAdminUmaVez()) console.log('admin de plataforma redefinido (040) e desbloqueado');
+  } catch (erro) {
+    console.log(`redefinição do admin (040) não aplicada (${erro.message})`);
   }
 
   // Falhar aqui não derruba a API: o caso comum é o banco ainda sem migração.
