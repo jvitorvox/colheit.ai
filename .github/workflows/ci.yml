@@ -72,7 +72,7 @@ jobs:
         run: |
           docker run -d --name armazem -p 9000:9000 \
             -e MINIO_ROOT_USER=$S3_CHAVE -e MINIO_ROOT_PASSWORD=$S3_SEGREDO \
-            minio/minio:latest server /dados
+            pgsty/minio:latest server /dados
           for i in $(seq 1 30); do
             curl -sf http://localhost:9000/minio/health/live && exit 0
             sleep 2

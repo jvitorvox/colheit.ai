@@ -30,7 +30,7 @@ services:
   # disco continua existindo para quem não quiser subir nada, e o teste roda
   # nos dois.
   armazem:
-    image: minio/minio:latest
+    image: pgsty/minio:latest
     container_name: colheitai-armazem
     restart: unless-stopped
     command: server /dados --console-address ":9001"
