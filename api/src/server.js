@@ -51,6 +51,10 @@ export function criarApp() {
     }
   });
 
+  // Marca de versão, para saber de fora qual código o servidor está rodando.
+  // Não expõe nada além deste rótulo; troque-o quando precisar conferir um deploy.
+  api.get('/versao', (_req, res) => res.json({ versao: 'admin-041' }));
+
   api.use("/auth", rotasAuth);
 
   // Conta é a única área pública da API: quem chega aqui ainda não é cliente.
