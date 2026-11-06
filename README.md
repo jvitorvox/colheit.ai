@@ -16,6 +16,27 @@ docker compose exec api npm --prefix api run migrar
 
 API em `http://localhost:7011` — `/saude` responde `{"ok":true}`.
 
+## Deploy automático
+
+`.github/workflows/deploy.yml` sobe a `main` no servidor por SSH sempre que o CI
+passa num push na `main`. Também dá para disparar à mão na aba Actions.
+
+No servidor, uma vez: um clone do repositório (com acesso de leitura ao GitHub)
+e o `.env` preenchido ao lado, fora do Git. O workflow leva o clone ao commit que
+passou no CI, sobe a stack e aplica as migrações (usa o `deploy.sh` quando ele
+existe).
+
+Secrets do repositório (ou do ambiente `producao`):
+
+| Secret | O que é |
+|---|---|
+| `DEPLOY_HOST` | endereço do servidor |
+| `DEPLOY_USER` | usuário SSH, com acesso ao Docker |
+| `DEPLOY_SSH_KEY` | chave privada desse usuário |
+| `DEPLOY_PATH` | pasta do clone no servidor |
+| `DEPLOY_PORT` | opcional, padrão 22 |
+| `DEPLOY_KNOWN_HOSTS` | opcional, saída de `ssh-keyscan` do servidor; sem ele a chave do host é aceita na primeira conexão |
+
 ## Testar o isolamento
 
 ```bash

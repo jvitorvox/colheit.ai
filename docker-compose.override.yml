@@ -1,0 +1,5 @@
+# Local: minio/minio saiu do Docker Hub (e o quay.io exige login).
+# pgsty/minio é um fork comunitário compatível, com `mc` para o healthcheck.
+services:
+  armazem:
+    image: pgsty/minio:latest

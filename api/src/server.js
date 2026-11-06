@@ -102,7 +102,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const admin = await garantirAdminFixo();
     console.log(admin.ligado
-      ? `admin de plataforma ${admin.email}`
+      ? `admin de plataforma ${admin.email}${admin.padrao ? ' — ⚠️ SENHA PADRÃO, troque PLATAFORMA_ADMIN_SENHA' : ''}`
       : `admin de plataforma desligado (${admin.motivo})`);
   } catch (erro) {
     console.log(`admin de plataforma não criado (${erro.message}) — rode a migração e suba de novo`);
