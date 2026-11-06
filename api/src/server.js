@@ -20,6 +20,7 @@ import { rotasPainel } from './modulos/painel/rotas.js';
 import { ligarSeAutorizado } from './modulos/captura/extrator.js';
 import { ligarSeConfigurado } from './modulos/auth/correio.js';
 import { garantirAdminFixo } from './admin-fixo.js';
+import { migrar } from './migrar.js';
 
 const RAIZ_WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 
@@ -97,6 +98,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(correio.ligado
     ? `correio LIGADO (${correio.host}, de ${correio.de})`
     : `correio desligado (${correio.motivo}) — recuperação só pelo gestor e pelo admin`);
+
+  // As migrações rodam na subida: um deploy que só troca o código não deixa o
+  // banco para trás. Cada uma roda uma vez, em transação; falhar aqui não
+  // derruba a API, só fica no log.
+  try {
+    await migrar();
+  } catch (erro) {
+    console.log(`migração não aplicada na subida (${erro.message})`);
+  }
 
   // Falhar aqui não derruba a API: o caso comum é o banco ainda sem migração.
   try {
