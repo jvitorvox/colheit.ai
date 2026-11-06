@@ -12,3 +12,7 @@ values ('Admin', 'admin@colheit.ai',
   'scrypt$16384$8$1$A5PuiQC4lgqDDO0FBwN06Q==$UgAFJn8aKn84/R1piNCNH6h0N1Zzo81FYlgk1o8TGstvks06XqNsTNqo5DhTyLRSaaAumLdoPZK7FpwJBwqIAg==')
 on conflict (email) do update
   set senha_hash = excluded.senha_hash, ativo = true;
+
+-- As falhas da senha antiga não podem valer contra a nova: o contador só zera
+-- com um login certo, e passadas dez falhas cada erro bloqueia por uma hora.
+delete from tentativa_login where chave = 'admin@colheit.ai';
